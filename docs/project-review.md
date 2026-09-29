@@ -13,7 +13,7 @@ Momento is a small Instagram-style community app and a practical container/CI/CD
 
 The historical transcript is not a current implementation specification. Use the architecture and authentication decision documents for the confirmed stack and scope.
 
-The current request establishes the organization hosting platform and GitLab as the target. Use GitLab as the primary pipeline and registry; treat the transcript's second GitHub pipeline as optional unless the assessment explicitly requires both.
+Earlier planning proposed GitLab delivery. The implemented repository currently has GitHub Actions; whether GitLab remains required by the school deliverable is unresolved. Confirm the rubric before adding a second pipeline or replacing the existing one.
 
 ## Recommended scope
 
@@ -109,6 +109,6 @@ Deliver a short architecture explanation, threat model, test matrix, screenshots
 
 ## Historical verification boundary of the original review
 
-For current status, see architecture.md and workflow-assessment.md. No Laravel implementation exists yet.
+For current status, see architecture.md and workflow-assessment.md. The Laravel starter now exists and local checks pass; product features and deployment remain pending.
 
 The source folder contained only the conversation document. It has been renamed from `instaklone` to `momento`; the historical transcript has subsequently been sanitized; it is not a byte-for-byte original. This review and Git ignore rules were added. No runtime/package inventory, dependency installation, Docker build, application test, Entra login, GitLab pipeline, or hosting platform deployment has been verified during this review. No exact dependency version or image digest is endorsed here.

@@ -1,5 +1,34 @@
 # Momento workflow assessment
 
+Reconciled 2026-09-26 against `develop` at `d5240d7`. This section is the current repository assessment; the original planning assessment below is retained as historical context and is superseded wherever it describes implementation as absent.
+
+## Current evidence
+
+- Laravel/Inertia/React starter and dependency lockfiles exist. Fortify implements local registration/login, email verification, recovery and profile settings, with 2FA and passkey scaffolding enabled.
+- Local checks passed: Pest 40 tests / 138 assertions; PHPStan zero errors; frontend formatting/lint and TypeScript; production asset build. The build reported an optional font-optimization dependency warning.
+- This evidence comes from the existing installation. Clean setup, browser interactions, actual mail delivery, provider logins, live CI, deployment, HA and recovery were not verified.
+- Tests use SQLite and in-memory sessions/cache. The environment example uses SQLite, database sessions/cache and log mail. PostgreSQL/Redis are confirmed targets, not verified integrations.
+- No photo model/upload/private-feed flow, account-disable mechanism or external-provider integration exists.
+- GitHub Actions exists for pull requests and pushes to `main`; direct pushes to `develop` do not trigger it. Earlier GitLab delivery intent requires reconciliation with the rubric.
+
+## Current classification and boundaries
+
+STANDARD assurance; provisional R2 for the intended private-content application. Planning is PARTIAL after this documentation reconciliation. Implemented capabilities include AUTH, SESSION, DATABASE and SECRETS, plus authenticated/verified route gates. Product-level object authorization, FILE_UPLOAD, FILE_PROCESSING, shared media storage and EXTERNAL_IDENTITY remain planned. Neither passing starter tests nor this classification establishes production readiness.
+
+## Decisions and remaining work
+
+The architecture and authentication plans are authoritative for technical direction and admission policy. Open verified signup supersedes invitation-only planning. PostgreSQL sessions, Redis cache/rate limiting and Swarm remain target choices. No automatic identity linking is intended.
+
+2FA and passkeys are enabled by the starter; release adoption is unresolved. Passkey deferral remains documented intent until explicitly changed. Existing tests do not establish persistent session revocation, disabled-user denial or Redis failure behavior.
+
+The current authorized milestone is documentation reconciliation only. Proposed later work: settle starter adoption, integrate PostgreSQL/Redis and mail testing, verify authentication lifecycle, then build upload → private feed → own deletion with negative authorization tests. Provider sequencing, school rubric, deadline, operational ownership and infrastructure readiness remain open. Historical credential revocation remains unverified; the transcript was not opened during this assessment.
+
+## Historical assessment
+
+Everything below describes the earlier pre-starter assessment. Use the current evidence above for implementation status; retained security requirements remain design requirements until separately verified.
+
+# Historical Momento workflow assessment
+
 Assessment date: 2026-09-26; revised after the Laravel correction. Applied skill: `software-project-workflow`.
 This is an engineering assessment, not an organizational classification, security certification, or production-readiness claim.
 

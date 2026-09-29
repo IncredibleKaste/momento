@@ -1,6 +1,10 @@
 # Authentication scope and implementation plan
 
-Updated 2026-09-26 following user confirmation. Requirements/design only; no provider is implemented or live-verified. This supersedes the earlier local-plus-single-tenant-Microsoft-only scope. Laravel owns authentication routes and sessions; React through Inertia supplies signup/login UI.
+Updated 2026-09-26 following user confirmation. Local Fortify authentication is implemented and covered by starter tests; external providers remain design-only and no provider login is live-verified. This supersedes the earlier local-plus-single-tenant-Microsoft-only scope. Laravel owns authentication routes and sessions; React through Inertia supplies signup/login UI.
+
+## Starter adoption status
+
+Registration, email verification and recovery support the confirmed local-account scope. Optional 2FA and passkeys are enabled by the starter, but their release adoption is UNKNOWN. The documented passkey deferral has not been superseded by a user decision. Do not silently treat generated behavior as approved scope.
 
 ## Requested options
 
@@ -11,7 +15,7 @@ Updated 2026-09-26 following user confirmation. Requirements/design only; no pro
 | Microsoft company login     | Required option; one test Entra tenant available per user | Backend OIDC integration; multiple approved company tenants confirmed; maintain an explicit tenant allowlist; the test tenant is one test resource           |
 | Google account              | Required option                                           | Backend provider integration; app registration, redirect configuration and minimal scopes required                                                           |
 | GitHub account              | Tentative                                                 | Optional later provider; do not make it a first-release prerequisite without confirmation                                                                    |
-| Passkeys                    | Later                                                     | WebAuthn credential registration/authentication, recovery and removal require a separate feature design; no current implementation                           |
+| Passkeys                    | Later                                                     | WebAuthn credential registration/authentication, recovery and removal require a separate feature design; starter enables passkeys, but adopting them for v1 remains unresolved                           |
 
 The first-release sequencing is proposed, not a reduction of requested scope: local signup/login and sessions → allowlisted multi-tenant Microsoft integration (using the test tenant first for evidence) and Google → SWITCH integration in parallel with external registration readiness → optional GitHub → passkeys later. Raise SWITCH registration early so external onboarding does not become a last-minute blocker. Exact deadline is around end of November; release expectations for each provider need mapping to the school rubric.
 
