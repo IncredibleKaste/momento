@@ -1,0 +1,34 @@
+# Allow only application/build inputs. Credentials, notes and user files
+# must never enter the context, including new files outside this list.
+**
+!artisan
+!composer.json
+!composer.lock
+!package.json
+!package-lock.json
+!vite.config.ts
+!tsconfig.json
+!app/
+!app/**
+!bootstrap/
+!bootstrap/app.php
+!bootstrap/providers.php
+!config/
+!config/**
+!database/
+!database/migrations/
+!database/migrations/**
+!public/
+!public/**
+!resources/
+!resources/**
+!routes/
+!routes/**
+!docker/
+!docker/Caddyfile
+!docker/php.ini
+public/build
+public/hot
+public/storage
+**/.env*
+**/*.sqlite*

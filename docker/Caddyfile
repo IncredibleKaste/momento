@@ -1,0 +1,25 @@
+{
+    admin off
+    auto_https off
+    frankenphp {
+        num_threads 4
+        max_wait_time 5s
+    }
+    servers {
+        timeouts {
+            read_header 10s
+            read_body 60s
+            write 60s
+            idle 60s
+        }
+    }
+}
+
+:8080 {
+    root * /app/public
+    route {
+        @private path /storage /storage/* /.env /.env/*
+        respond @private 404
+        php_server
+    }
+}

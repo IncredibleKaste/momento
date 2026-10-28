@@ -1,5 +1,7 @@
 # Momento: project assessment and mockup-derived feature list
 
+Historical mockup assessment. Current accepted scope/adoption is in [Architecture](architecture.md) and [Authentication](authentication-plan.md); current candidate evidence is in [Workflow assessment](workflow-assessment.md).
+
 Assessment date: 2026-09-27. Application revision: `d5240d7` on `develop`, with existing uncommitted documentation changes. Scope: repository and prototype inspection, current design decisions, feature extraction and proposed delivery order. No application implementation is authorized by this document.
 
 ## Assessment
@@ -14,15 +16,15 @@ Recommendation: stop broad visual exploration temporarily, agree the first-relea
 
 ## Evidence and readiness
 
-| Area | Evidence observed | Assessment |
-| --- | --- | --- |
-| Application foundation | `routes/web.php`, `routes/settings.php`, `app/Models/User.php`, auth/settings React pages, `config/fortify.php` | Local auth, verification/recovery and account settings scaffolding exist. Product feed/profile/chat routes and product models are absent. |
-| Persistence | Migrations cover users, sessions, cache, jobs, 2FA and passkeys | No post, media, follow, like, bookmark, comment or conversation schema exists. |
-| Auth adoption | Fortify enables registration, email verification, recovery, 2FA and passkeys | 2FA/passkey release adoption remains open; generated code does not resolve it. External providers remain planned. |
-| Target services | [Architecture](architecture.md), example configuration and existing assessment | PostgreSQL/Redis and private media are target integrations, not proven by the starter's SQLite/in-memory tests. |
-| Test and delivery evidence | Existing test files, `.github/workflows/tests.yml`, [workflow assessment](workflow-assessment.md) | Historical local checks passed on 2026-09-26; not rerun for this assessment. CI configuration exists, but live CI/deployment/HA/restore success is not established here. |
-| Design prototype | Sibling `momento-ui-mockups/instant-memories-v2.html`, `social.js`, `settings.js`, `login.html` and styles | Separate static prototype with sample content and temporary browser state; not integrated into the Laravel application. |
-| Working tree | Existing changes to README and four architecture/auth/review/workflow documents | These predate this assessment. No application code changes were found in the working-tree summary. |
+| Area                       | Evidence observed                                                                                               | Assessment                                                                                                                                                               |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Application foundation     | `routes/web.php`, `routes/settings.php`, `app/Models/User.php`, auth/settings React pages, `config/fortify.php` | Local auth, verification/recovery and account settings scaffolding exist. Product feed/profile/chat routes and product models are absent.                                |
+| Persistence                | Migrations cover users, sessions, cache, jobs, 2FA and passkeys                                                 | No post, media, follow, like, bookmark, comment or conversation schema exists.                                                                                           |
+| Auth adoption              | Fortify enables registration, email verification, recovery, 2FA and passkeys                                    | 2FA/passkey release adoption remains open; generated code does not resolve it. External providers remain planned.                                                        |
+| Target services            | [Architecture](architecture.md), example configuration and existing assessment                                  | PostgreSQL/Redis and private media are target integrations, not proven by the starter's SQLite/in-memory tests.                                                          |
+| Test and delivery evidence | Existing test files, `.github/workflows/tests.yml`, [workflow assessment](workflow-assessment.md)               | Historical local checks passed on 2026-09-26; not rerun for this assessment. CI configuration exists, but live CI/deployment/HA/restore success is not established here. |
+| Design prototype           | Sibling `momento-ui-mockups/instant-memories-v2.html`, `social.js`, `settings.js`, `login.html` and styles      | Separate static prototype with sample content and temporary browser state; not integrated into the Laravel application.                                                  |
+| Working tree               | Existing changes to README and four architecture/auth/review/workflow documents                                 | These predate this assessment. No application code changes were found in the working-tree summary.                                                                       |
 
 Planning remains PARTIAL. STANDARD assurance and provisional R2 remain the documented product classification; this is not a security certification. The prototype is an experiment. Production readiness cannot be inferred from either polished screens or starter tests.
 
@@ -37,13 +39,9 @@ Planning remains PARTIAL. STANDARD assurance and provisional R2 remain the docum
 - Main-page themes are selected by query/local page state. Durable cross-device preferences have not been established.
 - The prototype layers function replacements and CSS overrides over its original HTML. Use it as a visual/interaction reference, then implement coherent React components and backend actions rather than transplanting it wholesale.
 
-## Feature catalog
+## Planning boundary
 
-The canonical feature catalog is in the Obsidian Vault at `Work/Projects/Momento/02 Features/00 Feature Index.md`, linked from the Momento Project Hub. It contains 28 stable records as individual feature notes under seven topic indexes: Authentication; Interface and Appearance; Feed and Posts; Profiles and Following; Interactions and Search; Settings and Support; Messaging.
-
-F01–F22 preserve the original inventory IDs. F23–F26 make 2FA, passkeys, own-post deletion and the generated email-updates preference explicit adoption candidates. F27 covers the animated landing page; F28 covers message media attachments. Each note distinguishes lifecycle, implementation evidence, provenance, draft acceptance, open decisions and unassigned release target. Requested directions are PLANNING; unconfirmed candidates are PROPOSED. Nothing is marked RELEASED. Chat postponement remains a recommendation, not an accepted DEFERRED state.
-
-This repository page owns the dated source assessment, not the live backlog. Feature status and scheduling decisions should be updated in the Vault catalog.
+The internal feature catalog and operator notes are maintained outside this repository. This page describes only the static prototype's visible behavior; it does not publish the internal backlog, delivery environment or infrastructure.
 
 ### Visual requirements to preserve
 
@@ -62,15 +60,15 @@ These are shared presentation requirements, not separate backend features:
 
 These are engineering/product recommendations supporting the visible features, not additional accepted screens.
 
-| Gap | Why it belongs in the implementation plan | Evidence needed |
-| --- | --- | --- |
-| Content visibility and object authorization | Every feed, profile, search, saved-item and media response must obey the same audience rules | Two-user tests covering allowed and denied reads/actions, including direct media URLs |
-| Media lifecycle | File preview does not cover processing, storage cost or failure cleanup | Invalid/oversized image rejection, bounded decoding/re-encoding, metadata policy, private thumbnails/originals, partial failure and deletion cleanup |
-| Own-post deletion and account deletion effects | Users need a way to remove their content; Starter account deletion does not establish cleanup for future media/social data | Ownership denial tests, database/file cleanup and documented effects on comments/bookmarks/messages |
-| Basic abuse handling and account disablement | Open signup and user content create needs beyond a generic support form | Named moderation/support owner, disablement enforcement and scoped reporting/removal behavior before wider onboarding |
-| Data integrity and concurrent actions | Multiple sessions can race on follows, likes, saves and comments | Constraints, authorization, repeat-request handling and meaningful concurrent/retry tests |
-| Real service integration | Existing local tests do not exercise the target data/session/cache setup | PostgreSQL migrations/integration, Redis failure behavior, real mail and session lifecycle evidence |
-| Operational recovery | Photos and database rows form one recoverable product dataset | Coordinated restore, release rollback and dependency/host failure evidence; separate from UI acceptance |
+| Gap                                            | Why it belongs in the implementation plan                                                                                  | Evidence needed                                                                                                                                      |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Content visibility and object authorization    | Every feed, profile, search, saved-item and media response must obey the same audience rules                               | Two-user tests covering allowed and denied reads/actions, including direct media URLs                                                                |
+| Media lifecycle                                | File preview does not cover processing, storage cost or failure cleanup                                                    | Invalid/oversized image rejection, bounded decoding/re-encoding, metadata policy, private thumbnails/originals, partial failure and deletion cleanup |
+| Own-post deletion and account deletion effects | Users need a way to remove their content; Starter account deletion does not establish cleanup for future media/social data | Ownership denial tests, database/file cleanup and documented effects on comments/bookmarks/messages                                                  |
+| Basic abuse handling and account disablement   | Open signup and user content create needs beyond a generic support form                                                    | Named moderation/support owner, disablement enforcement and scoped reporting/removal behavior before wider onboarding                                |
+| Data integrity and concurrent actions          | Multiple sessions can race on follows, likes, saves and comments                                                           | Constraints, authorization, repeat-request handling and meaningful concurrent/retry tests                                                            |
+| Real service integration                       | Existing local tests do not exercise the target data/session/cache setup                                                   | PostgreSQL migrations/integration, Redis failure behavior, real mail and session lifecycle evidence                                                  |
+| Operational recovery                           | Photos and database rows form one recoverable product dataset                                                              | Coordinated restore, release rollback and dependency/host failure evidence; separate from UI acceptance                                              |
 
 ## Planning and learning references
 
