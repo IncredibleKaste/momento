@@ -1,0 +1,57 @@
+/* Rainbow details stay small; photographs and conversations lead. */
+.rainbow-menu{overflow:visible}.profile-link{color:var(--ink);text-decoration:none;font-weight:700}.profile-link:hover{text-decoration:underline;text-underline-offset:3px}.author{font-size:13px;font-weight:700}.caption-author{font-weight:800;margin-right:5px}.caption{font-size:13px;line-height:1.75;overflow-wrap:anywhere}.person{text-decoration:none}.person-face{height:70px;overflow:hidden}.person-face img{width:100%;height:100%;object-fit:cover}.avatar{padding:0;overflow:hidden;width:36px;height:36px}.avatar img{width:100%;height:100%;object-fit:cover}.profile-header{padding:30px 0;gap:25px;align-items:center}.profile-avatar{width:104px;height:104px;object-fit:cover;border:1px solid var(--line);border-top:3px solid var(--purple);border-radius:8px}.profile-copy{min-width:0}.profile-header .profile-bio{font-size:14px;color:var(--ink);line-height:1.7;overflow-wrap:anywhere}.profile-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.follow-button,.message-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 20px;min-height:42px;border-radius:5px;font-size:13px;font-weight:600;text-decoration:none}.follow-button{background:var(--green);color:var(--bg)}.follow-button[aria-pressed=true]{color:var(--green);background:var(--surface);box-shadow:inset 0 0 0 1px var(--green)}.message-button{border:1px solid var(--line);background:var(--surface)}.message-button svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7}.post-actions{gap:5px;margin-bottom:7px}.icon-button{min-width:44px;min-height:44px;border-radius:6px;transition:background-color .16s,color .16s}.icon-button svg{width:23px;height:23px;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round;transition:transform .18s cubic-bezier(.22,.61,.36,1),fill .16s}.icon-button[data-like][aria-pressed=true]{color:var(--red);background:color-mix(in srgb,var(--red) 12%,var(--bg))}.icon-button[data-save][aria-pressed=true]{color:var(--purple);background:color-mix(in srgb,var(--purple) 12%,var(--bg))}.icon-button[aria-pressed=true] svg{fill:currentColor;transform:scale(1.08)}.icon-button:active svg{transform:scale(.92)}.comment-button{display:flex;gap:7px;padding:8px}.comment-count{font-size:11px;color:var(--muted)}.comments-area{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}.comment-row{margin:5px 0;font-size:12px;line-height:1.65;overflow-wrap:anywhere}.comment-row>span{color:var(--muted)}.comment-author{margin-right:4px}.comment-empty{color:var(--muted);font-size:12px;line-height:1.6}.view-comments{font-size:12px;color:var(--muted);padding:10px 0;text-decoration:underline;text-underline-offset:3px}.comment-form{display:flex;gap:8px;margin-top:12px}.comment-form input{min-width:0;flex:1;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink);padding:11px;font-size:13px}.comment-form button{font-weight:700;color:var(--blue);padding:10px;min-height:44px}.sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.social-photo-dialog{width:min(650px,calc(100% - 24px));padding:38px 12px 12px;max-height:90dvh}.social-photo-dialog .post{margin:0}.social-photo-dialog .photo{max-height:45dvh;object-fit:contain}.chat-layout{display:grid;grid-template-columns:180px minmax(0,1fr);border:1px solid var(--line);border-radius:6px;overflow:hidden;min-height:480px}.chat-contacts{padding:9px;border-right:1px solid var(--line)}.chat-contact{display:flex;gap:10px;padding:12px 8px;border-radius:5px;text-decoration:none;align-items:center;min-width:0}.chat-contact.selected{background:color-mix(in srgb,var(--blue) 13%,var(--bg))}.chat-contact img,.chat-header img{width:35px;height:35px;object-fit:cover;border-radius:5px}.chat-contact strong{display:block;font-size:12px}.chat-contact small{font-size:10px;color:var(--muted);line-height:1.5;display:block;margin-top:3px}.chat-panel{display:flex;flex-direction:column;min-width:0;background:var(--surface)}.chat-empty{margin:auto;padding:24px;text-align:center}.chat-empty h2{font:28px 'EB Garamond',serif}.chat-empty p,.chat-hint{font-size:12px;color:var(--muted);line-height:1.7}.chat-header{display:flex;align-items:center;gap:10px;padding:14px;border-bottom:1px solid var(--line)}.chat-messages{height:320px;overflow-y:auto;display:flex;flex-direction:column;align-items:flex-end;gap:10px;padding:18px}.chat-hint{align-self:center;margin:auto;text-align:center}.chat-bubble{padding:11px 14px;margin:0;max-width:90%;border-radius:6px 6px 1px 6px;background:color-mix(in srgb,var(--blue) 17%,var(--surface));font-size:13px;line-height:1.65;overflow-wrap:anywhere;white-space:pre-wrap}.message-form{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line);margin-top:auto;align-items:flex-end}.message-form textarea{min-width:0;width:100%;resize:vertical;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--ink);padding:10px;font-size:13px}.message-form .primary{padding:12px}.nav-items{gap:11px;margin-top:65px}@media(hover:hover) and (pointer:fine){.icon-button:hover{background:var(--hover)}.message-button:hover,.chat-contact:hover{background:var(--hover)}}@media(max-width:540px){.nav-items{gap:5px;margin-top:34px}.profile-header{gap:13px;align-items:flex-start}.profile-avatar{width:70px;height:70px}.profile-header h1{font-size:28px}.profile-header .profile-bio{font-size:12px}.profile-actions{gap:7px;margin-top:12px}.follow-button,.message-button{padding:9px 12px}.chat-layout{display:flex;flex-direction:column;min-height:440px}.chat-contacts{display:flex;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:5px}.chat-contact{flex:0 0 auto;flex-direction:column;gap:5px;padding:7px 10px}.chat-contact small{display:none}.chat-contact strong{font-size:10px}.chat-messages{height:250px}.message-form{flex-wrap:wrap}.message-form .primary{margin-left:auto}.caption,.comment-row{font-size:12px}.person-face{height:60px}.profile-grid{gap:5px}}@media(max-height:650px){.nav-items{margin-top:18px;gap:3px}.settings-anchor{margin-bottom:12px}.brand-icon{margin-top:10px}}@media(prefers-reduced-motion:reduce){.icon-button,.icon-button svg{transition:none}.icon-button[aria-pressed=true] svg,.icon-button:active svg{transform:none}}
+@media(max-width:540px){.chat-contacts{overflow-y:hidden}}
+
+/* Stitch ribbon recipe, adapted: one rotation, soft drift and clipped sheen. */
+.corner-ribbon{position:fixed;top:0;right:0;width:156px;height:156px;overflow:hidden;pointer-events:none;z-index:15;contain:paint}
+.ribbon-art{position:absolute;top:20px;right:24px;width:112px;height:112px;transform-origin:top right}
+.ribbon-track{position:absolute;width:180px;height:7px;transform:rotate(45deg)}
+.ribbon-band{position:relative;display:block;width:280px;margin-left:-50px;height:100%;border-radius:2px;overflow:hidden;background:var(--ribbon-color);animation:ribbon-drift 8s ease-in-out infinite;animation-delay:var(--ribbon-delay)}
+.ribbon-band::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 10%,rgba(255,255,255,.42) 50%,transparent 90%);transform:translateX(-110%);opacity:0;animation:ribbon-sheen 8s cubic-bezier(.4,0,.2,1) infinite;animation-delay:var(--ribbon-delay)}
+@keyframes ribbon-drift{0%,100%{transform:translateY(0) scaleY(1)}50%{transform:translateY(-2px) scaleY(1.04)}}
+@keyframes ribbon-sheen{0%,12%{transform:translateX(-110%);opacity:0}28%{opacity:.65}58%{opacity:.65}78%,100%{transform:translateX(110%);opacity:0}}
+html[data-theme=dark] .corner-ribbon{opacity:.85}
+@media(max-width:850px){.corner-ribbon{width:96px;height:96px}.ribbon-art{top:14px;right:16px;transform:scale(.607143)}}
+@media(max-width:540px){.corner-ribbon{width:64px;height:64px}.ribbon-art{top:10px;right:10px;transform:scale(.392857)}}
+@media(prefers-reduced-motion:reduce){.ribbon-band,.ribbon-band::after{animation:none}.ribbon-band::after{opacity:0}}
+
+/* Open profile portraits and reversible spectrum link treatment. */
+.person,.person:hover{border:0;border-radius:0;background:transparent;overflow:visible;text-align:center}
+.person-face{width:72px;height:72px;margin:0 auto;background:transparent;border-radius:50%;overflow:hidden}
+.person-face img{display:block;width:100%;height:100%;object-fit:cover}
+.person-name{padding:10px 0 5px;font-size:12px;background:transparent}
+.following-grid .person-face{width:88px;height:88px}
+.avatar,.profile-avatar,.chat-contact img,.chat-header img{border-radius:50%;border:0;background:transparent}
+.profile-link:hover{text-decoration:none}
+.rainbow-label{--link-spectrum:linear-gradient(100deg,#648b49 0%,#b58b27 20%,#be5350 45%,#87619b 70%,#4c85a7 100%);position:relative;display:inline-block;vertical-align:baseline}
+html[data-theme=dark] .rainbow-label{--link-spectrum:linear-gradient(100deg,#a0bf78 0%,#e1bd61 20%,#e9918d 45%,#c0a0d4 70%,#8cbcd6 100%)}
+.rainbow-base{transition:opacity .24s ease}
+.rainbow-color{position:absolute;inset:0;pointer-events:none;background-image:var(--link-spectrum);background-size:150% 100%;background-position:100% 50%;background-clip:text;-webkit-background-clip:text;color:transparent;opacity:0;transition:opacity .24s ease,background-position .45s ease}
+.rainbow-label::after{content:'';position:absolute;left:0;right:0;top:calc(50% + .45em);height:1px;border-radius:2px;background-image:var(--link-spectrum);opacity:0;transform:scaleX(.7);transform-origin:left;transition:opacity .24s ease,transform .24s cubic-bezier(.22,.61,.36,1)}
+a:focus-visible .rainbow-base{opacity:0}a:focus-visible .rainbow-color{opacity:1;background-position:0 50%}a:focus-visible .rainbow-label::after{opacity:1;transform:scaleX(1)}
+@media(hover:hover) and (pointer:fine){a:hover .rainbow-base{opacity:0}a:hover .rainbow-color{opacity:1;background-position:0 50%}a:hover .rainbow-label::after{opacity:1;transform:scaleX(1)}}
+@media(max-width:540px){.person-face{width:58px;height:58px}.following-grid .person-face{width:72px;height:72px}}
+@media(prefers-reduced-motion:reduce){.rainbow-base,.rainbow-color,.rainbow-label::after{transition:none}}
+
+/* Personal portrait and deeper blue distinguish Profile from Chat. */
+:root{--profile-blue:#315778}
+html[data-theme=dark]{--profile-blue:#5279a0}
+.nav-profile-avatar{width:28px;height:28px;flex:none;object-fit:cover;border-radius:50%;margin-left:-2px}
+.nav-button[data-view=profile]:hover,.nav-button[data-view=profile]:focus-visible{background:#315778;color:#f6f1e6}
+.nav-button[data-view=profile]:hover .nav-label,.nav-button[data-view=profile]:focus-visible .nav-label{color:#f6f1e6}
+html[data-theme=dark] .nav-button[data-view=profile]:hover,html[data-theme=dark] .nav-button[data-view=profile]:focus-visible{background:#294966}
+
+/* Move the spectrum beneath the small m. mark without a visible reset. */
+.brand-icon::after{
+  background:repeating-linear-gradient(90deg,
+    #648b49 0 4px,#d9b350 4px 8px,#d87c38 8px 12px,
+    #be5350 12px 16px,#87619b 16px 20px,#4c85a7 20px 24px);
+  animation:brand-spectrum-flow 2.4s linear infinite;
+}
+@keyframes brand-spectrum-flow{
+  from{background-position:-24px 0}
+  to{background-position:0 0}
+}
+@media(prefers-reduced-motion:reduce){
+  .brand-icon::after{animation:none}
+}

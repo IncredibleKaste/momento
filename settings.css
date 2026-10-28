@@ -1,0 +1,26 @@
+.settings-anchor{margin-top:auto;margin-bottom:28px;position:relative}
+.settings-menu{position:absolute;bottom:58px;left:0;width:250px;max-width:calc(100vw - 32px);padding:6px;background:var(--surface);border:1px solid var(--line);border-radius:6px;box-shadow:0 16px 38px #302d2726;opacity:0;visibility:hidden;transform:translateY(8px);transition:opacity .2s ease,transform .24s cubic-bezier(.22,.61,.36,1),visibility 0s .24s}
+.settings-menu.open{opacity:1;visibility:visible;transform:none;transition-delay:0s}
+.settings-menu button{width:100%;min-height:44px;display:flex;align-items:center;justify-content:flex-start;gap:12px;padding:10px 12px;border-radius:5px;text-align:left;font-size:14px;font-weight:500;line-height:20px;color:var(--ink);transition:background-color .18s ease}
+.settings-menu button:hover,.settings-menu button:focus-visible{background:var(--hover)}
+.settings-menu button:focus-visible{outline-offset:-2px}
+.settings-menu svg{width:19px;height:19px;flex:none;fill:none;stroke:var(--muted);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.settings-menu #theme-icon{display:flex;flex:none}
+.settings-menu #theme{background:color-mix(in srgb,var(--blue) 12%,transparent)}
+.settings-menu #theme:hover,.settings-menu #theme:focus-visible{background:color-mix(in srgb,var(--blue) 22%,transparent)}
+.settings-menu #theme svg{stroke:var(--blue)}
+.theme-dot{width:6px;height:6px;border-radius:50%;background:var(--blue);margin-left:auto;flex:none}
+.settings-divider{border:0;border-top:1px solid var(--line);margin:4px 6px}
+.settings-menu [data-settings-action=logout]{color:var(--red)}
+.settings-menu [data-settings-action=logout] svg{stroke:currentColor}
+.settings-menu [data-settings-action=logout]:hover,.settings-menu [data-settings-action=logout]:focus-visible{background:color-mix(in srgb,var(--red) 10%,transparent)}
+html[data-theme=dark] .settings-menu{background:#282420;border-color:#3a352e;box-shadow:0 20px 40px #0006}
+html[data-theme=dark] .settings-menu button:hover,html[data-theme=dark] .settings-menu button:focus-visible{background:#342f2a}
+html[data-theme=dark] .settings-menu #theme{background:#4299e126}
+html[data-theme=dark] .settings-menu #theme:hover,html[data-theme=dark] .settings-menu #theme:focus-visible{background:#4299e138}
+html[data-theme=dark] .settings-menu #theme svg{stroke:#4299e1}
+html[data-theme=dark] .settings-menu .theme-dot{background:#4299e1}
+html[data-theme=dark] .settings-menu [data-settings-action=logout]{color:#f56565}
+html[data-theme=dark] .settings-menu [data-settings-action=logout]:hover,html[data-theme=dark] .settings-menu [data-settings-action=logout]:focus-visible{background:#f565651a}
+html[data-theme=dark] .settings-divider{border-color:#3a352e}
+.settings-form{max-width:480px}.settings-form h1{font:38px 'EB Garamond',serif}.settings-form h2{font:25px 'EB Garamond',serif;margin-top:32px}.settings-form .setting-row{display:flex;justify-content:space-between;gap:20px;padding:18px 0;border-bottom:1px solid var(--line)}.settings-form small{display:block;color:var(--muted);line-height:1.7;margin-top:5px}.settings-form input[type=checkbox]{accent-color:var(--green);width:18px}.settings-form .primary{margin-top:22px}@media(prefers-reduced-motion:reduce){.settings-menu{transition:none}}
