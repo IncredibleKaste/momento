@@ -18,3 +18,9 @@ Native source checks passed with 47 tests and 160 assertions. The implementation
 Review followed route/middleware behavior, application-key/schema/dependency failures, connection timeouts, private-file paths, code/storage permissions and build boundaries. Two concrete packaging issues were corrected: preserve composer.json for Laravel namespace discovery and include HEIC codec delegates. Both have container checks. There is no open must-fix finding within this runtime unit. This is author review, not an independent assessment.
 
 The runtime does not prove full photo processing, product authorization, provider/browser flows or operational acceptance. See [runtime instructions](runtime.md), [architecture](architecture.md) and [authentication policy](authentication-plan.md).
+
+## E02 artifact delivery candidate
+
+Source/container checks are reused for read-only PR validation and trusted-branch publication. The publisher pushes the exact image that passed its container suite. A separate fresh job verifies private visibility, anonymous denial, read-only digest pull and source labels. CI summaries provide the source/digest handoff; no image archive or actual deployment configuration is published.
+
+Current hosted checks, registry access and branch protection must be verified for the implementation candidate before claiming E02 complete. See [delivery boundaries](delivery.md).

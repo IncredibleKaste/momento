@@ -29,6 +29,7 @@ These passed in the existing local installation on 2026-09-26 (40 tests, 138 ass
 ## Documentation
 
 - [Docker runtime, health and configuration](docs/runtime.md)
+- [Git and private image delivery](docs/delivery.md)
 - [Architecture and implemented boundaries](docs/architecture.md)
 - [Authentication requirements and adoption decisions](docs/authentication-plan.md)
 - [Assessment evidence and outstanding gaps](docs/workflow-assessment.md)

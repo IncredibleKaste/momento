@@ -8,7 +8,7 @@ Build from the repository root:
 docker build --pull -t momento:local .
 ```
 
-The build needs internet access for locked dependencies, base images and the existing font build. PHP is available during the asset build because Wayfinder generates routes through Artisan. Base tags and extension packages can receive updates; rebuilding is not a promise of identical bytes. Deploy the tested image digest once artifact publication is implemented in E02.
+The build needs internet access for locked dependencies, base images and the existing font build. PHP is available during the asset build because Wayfinder generates routes through Artisan. Base tags and extension packages can receive updates; rebuilding is not a promise of identical bytes. Use the verified image digest from the [delivery pipeline summary](delivery.md); rebuilding is not a substitute for pulling that tested artifact.
 
 ## Runtime configuration
 
