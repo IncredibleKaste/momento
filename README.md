@@ -1,12 +1,12 @@
 # Momento
 
-Momento is a photo-sharing application in development. The intended community allows open signup with verification; photos will require authenticated, verified access.
+Momento is a photo-sharing application in development. The intended community allows open signup with verification; photos are intended for the owner and approved followers only.
 
 ## Current state
 
-The Laravel + Inertia + React starter is implemented, including local authentication, email verification, password recovery and profile settings. Two-factor authentication and passkeys are enabled in the starter; their v1 adoption remains unresolved. Photo uploads, the private feed, external identity providers and deployment are not implemented.
+The Laravel + Inertia + React starter is implemented, including local authentication, email verification, password recovery and profile settings. Optional two-factor authentication and passkeys are adopted for local accounts; their combined policy and browser flows still require verification. Photo uploads, approved-follow relationships, the private feed and external identity providers are not implemented. E01 adds a Docker/runtime candidate; deployment is not yet verified.
 
-PostgreSQL, Redis and multi-host Swarm are confirmed targets. The checked-in development example still uses SQLite and database cache; tests use SQLite and in-memory sessions/cache. Do not treat starter defaults as the target deployment architecture.
+The application requires PostgreSQL, Redis and private media storage. Microsoft is the selected required external provider; SWITCH is stretch. The checked-in development example still uses SQLite and database cache; tests use SQLite and in-memory sessions/cache. Do not treat starter defaults as the target deployment architecture.
 
 ## Development
 
@@ -28,10 +28,11 @@ These passed in the existing local installation on 2026-09-26 (40 tests, 138 ass
 
 ## Documentation
 
+- [Docker runtime, health and configuration](docs/runtime.md)
 - [Architecture and implemented boundaries](docs/architecture.md)
 - [Authentication requirements and adoption decisions](docs/authentication-plan.md)
 - [Assessment evidence and outstanding gaps](docs/workflow-assessment.md)
 - [Delivery proposal](docs/project-review.md)
 - [Security, HA and UI proposal](docs/security-ha-ui-proposal.md)
 
-The latter two documents are proposals, not deployment evidence. Never commit local credentials or the historical transcript.
+All real infrastructure information and internal operator notes stay outside this repository. Follow the committed [confidentiality rule](.ai/rules/general.md) before publishing code, documentation or artifacts.

@@ -1,40 +1,21 @@
-# Current architecture: Laravel + Inertia + React
+# Application architecture
 
-Decision date: 2026-09-26. Status: application stack confirmed by user; open verified signup, multiple approved Microsoft tenants and institutional SWITCHaai confirmed; provider setup remains pending.
+Momento uses Laravel with Inertia and React. Laravel owns routing, authentication, validation and authorization; browser assets ship with the application. No separate browser bearer-token API or production Node service is required.
 
-This document supersedes earlier application architectures. Laravel is the application/backend framework. React is explicitly confirmed through Inertia. Laravel owns routing, controllers, validation and authorization; this is not a separate React SPA/API architecture. The installed baseline assessed on 2026-09-26 uses PHP 8.5.11, Laravel 13.33.0, Inertia Laravel 3.4.0 and Fortify 1.40.0. Lockfiles record dependency versions; production runtime images remain unselected.
+## Application contracts
 
-## Confirmed and pending
+- PostgreSQL stores application records and authoritative sessions. Redis provides shared cache and rate limits; it does not decide durable authorization.
+- Open local signup requires email verification. Optional local two-factor authentication and passkeys are adopted, with their combined policy and browser flows still requiring feature acceptance.
+- External identities use validated provider/issuer/subject identifiers. Never link accounts or add local credentials merely because email addresses match.
+- Profiles expose only the allowed identity fields. Photos and captions are restricted to the owner and approved followers, with authorization required on every read.
+- Uploaded media requires bounded decoding, orientation handling, metadata removal, private storage and safe cleanup. The Docker image supplies codec capability; the product pipeline is a separate feature.
 
-| Area                 | Status                                                                                                                                                                                                                                               |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Application/backend  | Laravel, confirmed                                                                                                                                                                                                                                   |
-| Frontend             | React through Inertia, confirmed; Laravel owns routes/backend                                                                                                                                                                                        |
-| Data and sessions    | PostgreSQL confirmed; retain authoritative database-backed sessions and revocation requirements                                                                                                                                                      |
-| Cache/rate limits    | Redis confirmed for rate limits/cache; not authoritative security state                                                                                                                                                                              |
-| Identity             | Personal email/password, SWITCH AAI, company Microsoft, Google requested; GitHub tentative; passkeys later. Open verified signup and approved Microsoft tenants confirmed; SWITCH registration absent; no automatic linking; see authentication plan |
-| Photos               | Private storage, authorization on every read, bounded processing, metadata removal and cleanup requirements retained; provider/library pending                                                                                                       |
-| Deployment           | multi-host Swarm target confirmed; not provisioned or verified; runtime/container count pending                                                                                                                                                      |
-| Dependencies/tooling | Starter and lockfiles implemented; local checks pass; fresh installation and live CI remain unverified                                                                                                                                                  |
+## Runtime
 
-Conceptual flow: browser → HTTPS ingress → Laravel routes/controllers → Inertia React pages. Laravel accesses PostgreSQL, Redis and private media storage. Authentication callbacks terminate at the backend; provider credentials/tokens must not be serialized into Inertia page props. Use the same-origin Laravel browser session and CSRF boundary. No standalone React API service, browser bearer-token store or separate frontend runtime is required by this design. Asset build tooling is distinct from a production Node service; SSR is not currently required.
+The [Docker runtime](runtime.md) serves Laravel and built browser assets using PHP 8.5 and FrankenPHP classic mode. Configuration and durable state are external to the image. Liveness and dependency readiness are separate.
 
-[Authentication plan](authentication-plan.md) is authoritative for the expanded provider scope and confirmed admission policy and outstanding provider setup. Earlier two-provider-only plans are superseded.
+## Current implementation boundary
 
-## Preserved requirements
+The authentication/settings starter and E01 runtime foundation exist. Photo posting, follow relationships, the authorized feed and external-provider integrations are not yet implemented. Existing source tests do not establish full authentication/browser or private-photo acceptance.
 
-STANDARD assurance and provisional R2 risk describe the intended capabilities and impact, not the old framework. Preserve server-side authorization, membership/disabled-account enforcement, opaque revocable sessions, cookie/CSRF protections, restricted database authority, upload resource bounds, private files and separate identities. Laravel defaults/packages must be checked against these requirements; choosing a framework is not evidence they are met.
-
-Preserve acceptance expectations: clean migration, invalid/disabled-user denial, session rotation and logout revocation, CSRF denial, cross-user deletion denial, unauthorized media denial, malformed/oversized-image rejection, partial-write cleanup, limiter outage behavior, restore tests and revocation-preserving failover. Health must distinguish process liveness from usable dependencies. Laravel routes and Pest tests now exist; the retained acceptance expectations are not all covered.
-
-## Current repository state
-
-The Laravel starter is committed on `develop` at `d5240d7`. Local signup/login, verification, recovery, profile settings, 2FA and passkey scaffolding exist. Passkeys conflict with the documented deferral; 2FA/passkey release adoption remains unresolved. No photo model, upload/feed flow, account-disable mechanism or external-provider integration exists.
-
-The checked-in example uses SQLite, database sessions/cache and log mail. Tests use SQLite and in-memory sessions/cache; PostgreSQL and Redis remain target integrations. Local tests, PHP static analysis, frontend checks and asset build passed on 2026-09-26; see [assessment evidence](workflow-assessment.md). No browser, deployment or HA verification is claimed.
-
-## Next implementation boundary
-
-The stack clarification is complete: Laravel + Inertia + React, PostgreSQL, Redis and multi-host Swarm. Authentication has expanded, so use open verified signup and an explicit Microsoft tenant allowlist; resolve SWITCH registration/integration and provider-specific verification semantics before enabling those flows. These do not require reopening the framework decision. First reconcile documentation and resolve starter feature adoption. A proposed subsequent increment is PostgreSQL/Redis integration and authentication lifecycle verification, before private photo functionality. Implementation of that increment has not been authorized by the documentation update.
-
-Reference checked 2026-09-26: [Laravel React starter kit](https://laravel.com/docs/13.x/starter-kits). It provides an official starting point using React through Inertia and Laravel authentication; package versions must still be resolved and tested locally.
+Use the [authentication plan](authentication-plan.md) for identity policy and [verification record](workflow-assessment.md) for scoped evidence. Actual deployment infrastructure, network and storage arrangements are confidential and are documented outside this repository. Do not infer a hosted topology or availability guarantee from application code.
