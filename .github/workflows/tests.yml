@@ -5,7 +5,6 @@ on:
     branches:
       - main
       - develop
-      - feature/E01-docker-runtime
   pull_request:
 
 permissions:
@@ -40,121 +39,97 @@ jobs:
         run: composer ci:check
 
   container:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/container.yml
+
+  publish:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+    needs: ci
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/container.yml
+    with:
+      publish: true
+
+  verify-artifact:
+    needs: publish
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_DB: momento
-          POSTGRES_USER: momento
-          POSTGRES_PASSWORD: ci-only-password
-        ports:
-          - 5432:5432
-        options: --health-cmd "pg_isready -U momento" --health-interval 5s --health-retries 10
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
-        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    timeout-minutes: 10
+    permissions:
+      packages: read
+    env:
+      IMAGE: ${{ needs.publish.outputs.image }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Build runtime
-        id: build
-        run: |
-          printf 'CONTEXT_SENTINEL=must-not-enter-image\n' > .env.context-test
-          docker build --pull -t momento:ci .
-
-      - name: Check runtime permissions and image boundaries
-        run: |
-          test "$(docker inspect --format '{{.Config.User}}' momento:ci)" = www-data
-          docker run --rm --entrypoint sh momento:ci -ec '
-            test ! -f /app/.env
-            test ! -f /app/.env.context-test
-            test ! -d /app/.git
-            test ! -d /app/node_modules
-            test ! -d /app/vendor/pestphp
-            test ! -e /app/public/storage
-            test ! -w /app/app/Models/User.php
-            test -w /app/storage/app/private
-            test -s /app/public/build/manifest.json
-          '
-          docker run --rm --entrypoint frankenphp momento:ci validate --config /etc/caddy/Caddyfile --adapter caddyfile
-
-      - name: Verify image codecs in the runtime
-        run: |
-          docker run --rm --entrypoint php momento:ci -r '
-            set_exception_handler(function (Throwable $exception): void {
-                echo "::error::".$exception->getMessage()."\n";
-                exit(1);
-            });
-            foreach (["JPEG", "PNG", "WEBP", "HEIC"] as $format) {
-                if (! Imagick::queryFormats($format)) {
-                    throw new RuntimeException("Missing codec: ".$format);
-                }
-                $image = new Imagick;
-                $image->newImage(8, 8, "red");
-                $image->setImageFormat($format);
-                $decoded = new Imagick;
-                $decoded->readImageBlob($image->getImageBlob());
-                if ($decoded->getImageWidth() !== 8 || $decoded->getImageHeight() !== 8) {
-                    throw new RuntimeException("Codec round trip failed: ".$format);
-                }
-                echo $format." round trip passed\n";
-            }
-          '
-
-      - name: Start and exercise the application with PostgreSQL and Redis
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+      - name: Verify package privacy
         env:
-          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
-          REDIS_CONTAINER: ${{ job.services.redis.id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          export APP_KEY="base64:$(openssl rand -base64 32)"
-          start_app() {
-            docker run -d --name momento-ci --network host \
-              -e APP_KEY -e APP_URL=http://127.0.0.1:8080 \
-              -e DB_HOST=127.0.0.1 -e DB_DATABASE=momento -e DB_USERNAME=momento -e DB_PASSWORD=ci-only-password \
-              -e REDIS_HOST=127.0.0.1 \
-              --mount source=momento-media,target=/app/storage/app/private momento:ci
-          }
-          expect_ready() {
-            curl --fail --retry 10 --retry-all-errors --retry-delay 1 http://127.0.0.1:8080/ready
-          }
-          start_app
-          curl --fail --retry 10 --retry-all-errors --retry-delay 1 http://127.0.0.1:8080/up > /dev/null
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/ready)" = 503
-          docker exec momento-ci php artisan migrate --force --no-interaction
-          docker exec momento-ci php artisan route:list --except-vendor --no-interaction
-          expect_ready
-          curl --fail http://127.0.0.1:8080/login > /dev/null
-          docker exec momento-ci sh -c 'printf private-canary > storage/app/private/canary.txt'
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/storage/canary.txt)" = 404
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/.env)" = 404
-          docker exec "$POSTGRES_CONTAINER" psql -U momento -c "INSERT INTO users(name,email,password) VALUES ('CI Persist', 'ci@example.invalid', 'unused');"
-          docker rm -f momento-ci
-          start_app
-          expect_ready
-          test "$(docker exec momento-ci cat storage/app/private/canary.txt)" = private-canary
-          test "$(docker exec "$POSTGRES_CONTAINER" psql -U momento -Atc "SELECT count(*) FROM users WHERE email='ci@example.invalid'")" = 1
-          docker stop "$REDIS_CONTAINER"
-          test "$(curl --max-time 8 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/ready)" = 503
-          curl --fail http://127.0.0.1:8080/up > /dev/null
-          docker start "$REDIS_CONTAINER"
-          expect_ready
-          docker stop "$POSTGRES_CONTAINER"
-          test "$(curl --max-time 8 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/ready)" = 503
-          curl --fail http://127.0.0.1:8080/up > /dev/null
-          docker start "$POSTGRES_CONTAINER"
-          expect_ready
+          package="${GITHUB_REPOSITORY#*/}"
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            "$GITHUB_API_URL/users/$GITHUB_REPOSITORY_OWNER/packages/container/$package" \
+            --output "$RUNNER_TEMP/package.json"
+          python3 - "$RUNNER_TEMP/package.json" <<'PY'
+          import json, sys
+          if json.load(open(sys.argv[1]))["visibility"] != "private":
+              raise SystemExit("Package must remain private")
+          PY
 
-      - name: Runtime logs
-        if: failure()
+      - name: Verify anonymous pull is denied
         run: |
-          if docker container inspect momento-ci > /dev/null 2>&1; then
-            docker logs momento-ci
+          repository="${GITHUB_REPOSITORY,,}"
+          status=$(curl --silent --show-error --output "$RUNNER_TEMP/anonymous.json" --write-out '%{http_code}' \
+            "https://ghcr.io/token?service=ghcr.io&scope=repository:$repository:pull")
+          case "$status" in
+            200|401|403) ;;
+            *) echo "::error::Anonymous token request failed: HTTP $status"; exit 1 ;;
+          esac
+          if [ "$status" = 200 ]; then
+            token=$(python3 - "$RUNNER_TEMP/anonymous.json" <<'PY'
+          import json, sys
+          token = json.load(open(sys.argv[1])).get("token")
+          if not isinstance(token, str) or not token.strip():
+              raise SystemExit("Invalid anonymous registry token")
+          print(token)
+          PY
+            )
+            status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              --header "Authorization: Bearer $token" \
+              --header 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+              "https://ghcr.io/v2/$repository/manifests/${IMAGE##*@}")
           fi
+          case "$status" in
+            401|403|404) echo 'Anonymous image pull denied' ;;
+            *) echo "::error::Unexpected anonymous registry response: $status"; exit 1 ;;
+          esac
+
+      - name: Pull exact digest with read-only authority
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCKER_CONFIG: ${{ runner.temp }}/docker-auth
+        run: |
+          [[ "$IMAGE" == "ghcr.io/${GITHUB_REPOSITORY,,}@sha256:"* ]]
+          [[ "${IMAGE##*@}" =~ ^sha256:[a-f0-9]{64}$ ]]
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker pull "$IMAGE"
+          test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE")" = "$GITHUB_SHA"
+          test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.source"}}' "$IMAGE")" = "https://github.com/$GITHUB_REPOSITORY"
+          {
+            echo '### Verified private image'
+            echo
+            echo "Source commit: \`$GITHUB_SHA\`"
+            echo
+            echo "Image: \`$IMAGE\`"
+            echo
+            echo 'Private visibility, anonymous denial and a fresh read-only digest pull passed.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove registry authentication
+        if: always()
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker-auth
+        run: rm -rf "$DOCKER_CONFIG"
