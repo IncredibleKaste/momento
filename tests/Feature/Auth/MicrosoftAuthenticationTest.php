@@ -27,7 +27,7 @@ const MICROSOFT_TEST_CLIENT = '22222222-2222-4222-8222-222222222222';
 const MICROSOFT_TEST_OBJECT = '33333333-3333-4333-8333-333333333333';
 
 beforeEach(function () {
-    $addressHash = hash('sha256', $this->name());
+    $addressHash = hash('sha256', $this->nameWithDataSet());
     $this->withServerVariables(['REMOTE_ADDR' => '2001:db8:'.substr($addressHash, 0, 4).':'.substr($addressHash, 4, 4).'::1']);
     config(['services.microsoft' => [
         'client_id' => MICROSOFT_TEST_CLIENT, 'client_secret' => 'fictional-test-secret',
@@ -170,8 +170,9 @@ it('rejects stale or replayed callbacks even when the old session snapshot is re
 
 it('rejects absent or mismatched state and consent denial without exposing provider text', function () {
     [$callback, $stub] = beginMicrosoft($this);
+    $requests = count($stub->requests);
     $this->get(route('microsoft.callback', ['state' => 'wrong', 'code' => 'test']))->assertRedirectToRoute('login');
-    expect($stub->requests)->toHaveCount(1);
+    expect($stub->requests)->toHaveCount($requests);
     [$callback] = beginMicrosoft($this);
     $this->get($callback.'&error=access_denied&error_description=private-provider-error')->assertRedirectToRoute('login')->assertSessionHasErrors(['microsoft' => 'Microsoft sign-in was cancelled or declined. You can try again.']);
 });
