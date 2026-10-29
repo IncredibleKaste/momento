@@ -8,6 +8,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
+    --font-serif: Georgia, 'Times New Roman', serif;
     --font-sans:
         'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
@@ -62,74 +63,149 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
+    --background: #f6f1e6;
+    --foreground: #302d27;
+    --card: #faf7ef;
+    --card-foreground: var(--foreground);
+    --popover: var(--card);
+    --popover-foreground: var(--foreground);
+    --primary: var(--foreground);
+    --primary-foreground: var(--background);
+    --secondary: #eae2d3;
+    --secondary-foreground: var(--foreground);
+    --muted: var(--secondary);
+    --muted-foreground: #716a5e;
+    --accent: var(--secondary);
+    --accent-foreground: var(--foreground);
     --destructive: oklch(0.577 0.245 27.325);
     --destructive-foreground: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.87 0 0);
+    --border: #d9d1c2;
+    --input: #928976;
+    --ring: var(--foreground);
     --chart-1: oklch(0.646 0.222 41.116);
     --chart-2: oklch(0.6 0.118 184.704);
     --chart-3: oklch(0.398 0.07 227.392);
     --chart-4: oklch(0.828 0.189 84.429);
     --chart-5: oklch(0.769 0.188 70.08);
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.87 0 0);
+    --sidebar: var(--background);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: var(--accent);
+    --sidebar-accent-foreground: var(--foreground);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
+    --navigation-green: #648b49;
+    --navigation-blue: #4c85a7;
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.145 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.145 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.985 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
+    --background: #211f1b;
+    --foreground: #eee8dc;
+    --card: #27241f;
+    --card-foreground: var(--foreground);
+    --popover: var(--card);
+    --popover-foreground: var(--foreground);
+    --primary: var(--foreground);
+    --primary-foreground: var(--background);
+    --secondary: #373128;
+    --secondary-foreground: var(--foreground);
+    --muted: var(--secondary);
+    --muted-foreground: #ada698;
+    --accent: var(--secondary);
+    --accent-foreground: var(--foreground);
     --destructive: oklch(0.396 0.141 25.723);
     --destructive-foreground: oklch(0.637 0.237 25.331);
-    --border: oklch(0.269 0 0);
-    --input: oklch(0.269 0 0);
-    --ring: oklch(0.439 0 0);
+    --border: #484237;
+    --input: #817969;
+    --ring: var(--foreground);
     --chart-1: oklch(0.488 0.243 264.376);
     --chart-2: oklch(0.696 0.17 162.48);
     --chart-3: oklch(0.769 0.188 70.08);
     --chart-4: oklch(0.627 0.265 303.9);
     --chart-5: oklch(0.645 0.246 16.439);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.985 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(0.269 0 0);
-    --sidebar-ring: oklch(0.439 0 0);
+    --sidebar: var(--background);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: var(--accent);
+    --sidebar-accent-foreground: var(--foreground);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
+    --navigation-green: #a0bf78;
+    --navigation-blue: #8cbcd6;
+}
+
+.momento-rail {
+    width: var(--sidebar-width-icon);
+    border: 0;
+}
+
+.momento-rail > [data-sidebar='sidebar'] {
+    padding: 1rem 0.75rem;
+    background: transparent;
+}
+
+.rail-link {
+    --navigation-accent: var(--navigation-green);
+}
+
+.rail-user {
+    --navigation-accent: var(--navigation-blue);
+}
+
+.rail-link[aria-current='page'],
+.rail-link:hover,
+.rail-link:focus-visible {
+    background: color-mix(
+        in srgb,
+        var(--navigation-accent) 13%,
+        var(--background)
+    );
+    color: var(--foreground);
+}
+
+@media (min-width: 768px) {
+    .momento-rail .rail-label,
+    .momento-rail .user-info-copy {
+        position: absolute;
+        left: 3.5rem;
+        width: 8.5rem;
+        overflow: hidden;
+        opacity: 0;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        transform: translateX(-0.5rem);
+        transition:
+            opacity 180ms ease,
+            transform 180ms ease;
+    }
+
+    .momento-rail:hover,
+    .momento-rail:focus-within,
+    [data-state='expanded'] > .momento-rail {
+        width: var(--sidebar-width);
+    }
+
+    .momento-rail:is(:hover, :focus-within) .rail-label,
+    .momento-rail:is(:hover, :focus-within) .user-info-copy,
+    [data-state='expanded'] > .momento-rail .rail-label,
+    [data-state='expanded'] > .momento-rail .user-info-copy {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .momento-shell *,
+    [data-mobile='true'],
+    [data-slot='sheet-content'],
+    [data-slot='sheet-overlay'],
+    [data-slot='dropdown-menu-content'] {
+        animation: none !important;
+        transition: none !important;
+    }
 }
 
 @layer base {

@@ -1,63 +1,70 @@
 import { Link } from '@inertiajs/react';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-react';
+import { House, X } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
-import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
+import { Button } from '@/components/ui/button';
 import {
     Sidebar,
     SidebarContent,
     SidebarFooter,
     SidebarHeader,
     SidebarMenu,
-    SidebarMenuButton,
     SidebarMenuItem,
+    useSidebar,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
     {
-        title: 'Dashboard',
+        title: 'Home',
         href: dashboard(),
-        icon: LayoutGrid,
-    },
-];
-
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: FolderGit2,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#react',
-        icon: BookOpen,
+        icon: House,
     },
 ];
 
 export function AppSidebar() {
+    const { setOpenMobile } = useSidebar();
+
     return (
-        <Sidebar collapsible="icon" variant="inset">
-            <SidebarHeader>
+        <Sidebar collapsible="icon" className="momento-rail">
+            <SidebarHeader className="flex-row items-center p-0">
                 <SidebarMenu>
                     <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" asChild>
-                            <Link href={dashboard()} prefetch>
+                        <Button
+                            variant="ghost"
+                            className="rail-link relative h-11 w-full justify-start gap-3 overflow-hidden px-2"
+                            asChild
+                        >
+                            <Link
+                                href={dashboard()}
+                                aria-label="Momento home"
+                                onClick={() => setOpenMobile(false)}
+                                prefetch
+                            >
                                 <AppLogo />
                             </Link>
-                        </SidebarMenuButton>
+                        </Button>
                     </SidebarMenuItem>
                 </SidebarMenu>
+                <Button
+                    variant="ghost"
+                    className="size-11 shrink-0 md:hidden"
+                    aria-label="Close navigation"
+                    onClick={() => setOpenMobile(false)}
+                >
+                    <X />
+                </Button>
             </SidebarHeader>
 
-            <SidebarContent>
-                <NavMain items={mainNavItems} />
+            <SidebarContent className="pt-10">
+                <nav aria-label="Main navigation" id="main-navigation">
+                    <NavMain items={mainNavItems} />
+                </nav>
             </SidebarContent>
 
-            <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
+            <SidebarFooter className="p-0">
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

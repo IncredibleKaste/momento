@@ -1,33 +1,43 @@
 import { Link } from '@inertiajs/react';
+import { Button } from '@/components/ui/button';
 import {
     SidebarGroup,
-    SidebarGroupLabel,
     SidebarMenu,
-    SidebarMenuButton,
     SidebarMenuItem,
+    useSidebar,
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import type { NavItem } from '@/types';
 
 export function NavMain({ items }: { items: NavItem[] }) {
     const { isCurrentUrl } = useCurrentUrl();
+    const { setOpenMobile } = useSidebar();
 
     return (
-        <SidebarGroup className="px-2 py-0">
-            <SidebarGroupLabel>Platform</SidebarGroupLabel>
+        <SidebarGroup className="p-0">
             <SidebarMenu>
                 {items.map((item) => (
                     <SidebarMenuItem key={item.title}>
-                        <SidebarMenuButton
+                        <Button
                             asChild
-                            isActive={isCurrentUrl(item.href)}
-                            tooltip={{ children: item.title }}
+                            variant="ghost"
+                            className="rail-link relative h-11 w-full justify-start gap-3 overflow-hidden px-2"
                         >
-                            <Link href={item.href} prefetch>
-                                {item.icon && <item.icon />}
-                                <span>{item.title}</span>
+                            <Link
+                                href={item.href}
+                                aria-label={item.title}
+                                aria-current={
+                                    isCurrentUrl(item.href) ? 'page' : undefined
+                                }
+                                onClick={() => setOpenMobile(false)}
+                                prefetch
+                            >
+                                <span className="flex size-8 shrink-0 items-center justify-center">
+                                    {item.icon && <item.icon />}
+                                </span>
+                                <span className="rail-label">{item.title}</span>
                             </Link>
-                        </SidebarMenuButton>
+                        </Button>
                     </SidebarMenuItem>
                 ))}
             </SidebarMenu>
