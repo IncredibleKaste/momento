@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\ProtectPasskeyCeremonies;
+use App\Http\Middleware\ProtectSecurityCredentials;
 use Laravel\Fortify\Features;
 
 return [
@@ -101,7 +103,7 @@ return [
     |
     */
 
-    'middleware' => ['web'],
+    'middleware' => ['web', ProtectSecurityCredentials::class, ProtectPasskeyCeremonies::class],
 
     /*
     |--------------------------------------------------------------------------

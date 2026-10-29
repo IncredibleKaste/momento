@@ -6,6 +6,7 @@ import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Spinner } from '@/components/ui/spinner';
+import { dashboard } from '@/routes';
 
 type Props = {
     routes?: {
@@ -31,7 +32,7 @@ export default function PasskeyVerify({
             },
         }),
         onSuccess: (response) => {
-            router.visit(response.redirect ?? '/dashboard');
+            router.visit(response.redirect ?? dashboard.url());
         },
     });
 
@@ -55,7 +56,14 @@ export default function PasskeyVerify({
                         : (label ?? 'Sign in with a passkey')}
                 </Button>
                 {error && (
-                    <InputError message={error} className="text-center" />
+                    <div className="space-y-2 text-center">
+                        <InputError message={error} />
+                        <p className="text-sm text-muted-foreground">
+                            Try again after cancellation or timeout, or continue
+                            with your password below. Any enrolled authenticator
+                            code is still required with password sign-in.
+                        </p>
+                    </div>
                 )}
             </div>
 
