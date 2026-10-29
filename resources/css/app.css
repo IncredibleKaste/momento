@@ -199,6 +199,7 @@
 
 @media (prefers-reduced-motion: reduce) {
     .momento-shell *,
+    [data-mobile='true'],
     [data-slot='sheet-content'],
     [data-slot='sheet-overlay'],
     [data-slot='dropdown-menu-content'] {
