@@ -28,12 +28,9 @@ test('session storage failure returns retry without publishing a login session',
 })->with(['select', 'insert']);
 
 test('an unavailable Redis limiter denies registration with a retry response', function () {
-    if (config('cache.default') !== 'redis') {
-        $this->markTestSkipped('Requires the isolated Redis integration environment.');
+    if (config('cache.default') !== 'redis' || (int) config('database.redis.cache.port') !== 1) {
+        $this->markTestSkipped('Requires the isolated Redis outage process.');
     }
-
-    config(['database.redis.cache.host' => '127.0.0.1', 'database.redis.cache.port' => 1, 'database.redis.cache.url' => null]);
-    app('redis')->purge('cache');
 
     $response = $this->postJson(route('register.store'), [
         'name' => 'Alex Example', 'email' => 'alex@example.test',

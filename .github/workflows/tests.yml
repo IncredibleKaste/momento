@@ -64,12 +64,14 @@ jobs:
           SESSION_DRIVER: database
           CACHE_STORE: redis
           CACHE_PREFIX: auth-test-${{ github.run_id }}-${{ github.run_attempt }}-
-        run: >-
-          php artisan test --compact
-          tests/Feature/Auth/SessionLifecycleTest.php
-          tests/Feature/Auth/QueuedAuthenticationMailTest.php
-          tests/Feature/Auth/AuthenticationRateLimitTest.php
-          tests/Feature/Auth/ServiceFailureTest.php
+        run: |
+          php artisan test --compact \
+            tests/Feature/Auth/SessionLifecycleTest.php \
+            tests/Feature/Auth/QueuedAuthenticationMailTest.php \
+            tests/Feature/Auth/AuthenticationRateLimitTest.php \
+            tests/Feature/Auth/ServiceFailureTest.php
+          REDIS_PORT=1 php artisan test --compact \
+            tests/Feature/Auth/ServiceFailureTest.php --filter='an unavailable Redis limiter'
 
   container:
     if: github.event_name == 'pull_request'
