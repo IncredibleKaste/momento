@@ -13,6 +13,8 @@ use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
+use Laravel\Passkeys\Contracts\PasskeyUser;
+use Laravel\Passkeys\Passkeys;
 
 class FortifyServiceProvider extends ServiceProvider
 {
@@ -32,6 +34,8 @@ class FortifyServiceProvider extends ServiceProvider
         $this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();
+
+        Passkeys::authorizeLoginUsing(fn (Request $request, PasskeyUser $user): bool => filled($user->getAuthPassword()));
     }
 
     /**
@@ -92,9 +96,10 @@ class FortifyServiceProvider extends ServiceProvider
         });
 
         RateLimiter::for('passkeys', function (Request $request) {
-            return Limit::perMinute(10)->by(
-                ($request->input('credential.id') ?: $request->session()->getId()).'|'.$request->ip(),
-            );
+            return [
+                Limit::perMinute(10)->by('session|'.$request->session()->getId().'|'.$request->ip()),
+                Limit::perMinute(60)->by('ip|'.$request->ip()),
+            ];
         });
     }
 }
