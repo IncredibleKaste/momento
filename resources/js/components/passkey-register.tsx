@@ -1,5 +1,5 @@
 import { usePasskeyRegister } from '@laravel/passkeys/react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,8 @@ type Props = {
 };
 
 export default function PasskeyRegistration({ onSuccess }: Props) {
+    const addButtonRef = useRef<HTMLButtonElement>(null);
+    const registerButtonRef = useRef<HTMLButtonElement>(null);
     const [name, setName] = useState('');
 
     const [showForm, setShowForm] = useState(false);
@@ -18,6 +20,9 @@ export default function PasskeyRegistration({ onSuccess }: Props) {
             setName('');
             setShowForm(false);
             onSuccess();
+        },
+        onError: () => {
+            requestAnimationFrame(() => registerButtonRef.current?.focus());
         },
     });
 
@@ -34,6 +39,7 @@ export default function PasskeyRegistration({ onSuccess }: Props) {
     const handleCancel = () => {
         setShowForm(false);
         setName('');
+        requestAnimationFrame(() => addButtonRef.current?.focus());
     };
 
     if (!isSupported) {
@@ -47,7 +53,11 @@ export default function PasskeyRegistration({ onSuccess }: Props) {
 
     if (!showForm) {
         return (
-            <Button variant="outline" onClick={() => setShowForm(true)}>
+            <Button
+                ref={addButtonRef}
+                variant="outline"
+                onClick={() => setShowForm(true)}
+            >
                 Add passkey
             </Button>
         );
@@ -89,7 +99,11 @@ export default function PasskeyRegistration({ onSuccess }: Props) {
             )}
 
             <div className="flex gap-2">
-                <Button type="submit" disabled={isLoading || !name.trim()}>
+                <Button
+                    ref={registerButtonRef}
+                    type="submit"
+                    disabled={isLoading || !name.trim()}
+                >
                     {isLoading ? 'Registering...' : 'Register passkey'}
                 </Button>
                 <Button
