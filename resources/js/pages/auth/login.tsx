@@ -1,4 +1,4 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, Link, usePage } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
@@ -9,19 +9,36 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { register } from '@/routes';
 import { store } from '@/routes/login';
+import { index as microsoft } from '@/routes/microsoft';
 import { request } from '@/routes/password';
 import PasskeyVerify from '@/components/passkey-verify';
 
 type Props = {
     status?: string;
     canResetPassword: boolean;
+    canMicrosoftLogin: boolean;
 };
 
-export default function Login({ status, canResetPassword }: Props) {
+export default function Login({
+    status,
+    canResetPassword,
+    canMicrosoftLogin,
+}: Props) {
+    const { errors } = usePage().props;
     return (
         <>
             <Head title="Log in" />
 
+            {errors.microsoft && (
+                <p role="alert" className="text-sm text-destructive">
+                    {errors.microsoft}
+                </p>
+            )}
+            {canMicrosoftLogin && (
+                <Button asChild variant="outline" className="w-full">
+                    <Link href={microsoft()}>Continue with Microsoft</Link>
+                </Button>
+            )}
             <PasskeyVerify />
 
             <Form
@@ -40,7 +57,6 @@ export default function Login({ status, canResetPassword }: Props) {
                                     name="email"
                                     required
                                     autoFocus
-                                    tabIndex={1}
                                     autoComplete="email"
                                     placeholder="email@example.com"
                                 />
@@ -54,7 +70,6 @@ export default function Login({ status, canResetPassword }: Props) {
                                         <TextLink
                                             href={request()}
                                             className="ml-auto text-sm"
-                                            tabIndex={5}
                                         >
                                             Forgot your password?
                                         </TextLink>
@@ -64,7 +79,6 @@ export default function Login({ status, canResetPassword }: Props) {
                                     id="password"
                                     name="password"
                                     required
-                                    tabIndex={2}
                                     autoComplete="current-password"
                                     placeholder="Password"
                                 />
@@ -72,18 +86,13 @@ export default function Login({ status, canResetPassword }: Props) {
                             </div>
 
                             <div className="flex items-center space-x-3">
-                                <Checkbox
-                                    id="remember"
-                                    name="remember"
-                                    tabIndex={3}
-                                />
+                                <Checkbox id="remember" name="remember" />
                                 <Label htmlFor="remember">Remember me</Label>
                             </div>
 
                             <Button
                                 type="submit"
                                 className="mt-4 w-full"
-                                tabIndex={4}
                                 disabled={processing}
                                 data-test="login-button"
                             >
@@ -94,9 +103,7 @@ export default function Login({ status, canResetPassword }: Props) {
 
                         <div className="text-center text-sm text-muted-foreground">
                             Don't have an account?{' '}
-                            <TextLink href={register()} tabIndex={5}>
-                                Sign up
-                            </TextLink>
+                            <TextLink href={register()}>Sign up</TextLink>
                         </div>
                     </>
                 )}
