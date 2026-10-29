@@ -143,27 +143,23 @@ jobs:
             docker logs momento-ci
           fi
 
-      - name: Refuse an existing non-private package
+      - name: Require an existing private package
         if: inputs.publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           package="${GITHUB_REPOSITORY#*/}"
-          status=$(curl --silent --show-error --output "$RUNNER_TEMP/package.json" --write-out '%{http_code}' \
+          status=$(curl --fail --silent --show-error --write-out '%{http_code}' \
             --header "Authorization: Bearer $GH_TOKEN" \
             --header 'Accept: application/vnd.github+json' \
-            "$GITHUB_API_URL/users/$GITHUB_REPOSITORY_OWNER/packages/container/$package")
-          case "$status" in
-            200)
-              python3 - "$RUNNER_TEMP/package.json" <<'PY'
+            "$GITHUB_API_URL/users/$GITHUB_REPOSITORY_OWNER/packages/container/$package" \
+            --output "$RUNNER_TEMP/package.json")
+          test "$status" = 200
+          python3 - "$RUNNER_TEMP/package.json" <<'PY'
           import json, sys
           if json.load(open(sys.argv[1]))["visibility"] != "private":
               raise SystemExit("Refusing to publish to a non-private package")
           PY
-              ;;
-            404) echo 'New packages are private by default' ;;
-            *) echo "::error::Cannot verify package privacy: HTTP $status"; exit 1 ;;
-          esac
 
       - name: Publish the tested image
         id: publish
