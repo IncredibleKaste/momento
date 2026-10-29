@@ -18,6 +18,8 @@ class ResetUserPassword implements ResetsUserPasswords
      */
     public function reset(User $user, array $input): void
     {
+        abort_unless(filled($user->password) && $user->disabled_at === null, 403);
+
         Validator::make($input, [
             'password' => $this->passwordRules(),
         ])->validate();

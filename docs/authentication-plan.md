@@ -1,6 +1,6 @@
 # Authentication scope and implementation plan
 
-Reconciled 2026-10-28 against the confirmed technical-demo baseline. Local Fortify authentication is implemented and covered by starter tests; external providers remain design-only and no provider login is live-verified. Microsoft is required for this demo, SWITCH is stretch, Google remains later/unassigned. Laravel owns authentication routes and sessions; React through Inertia supplies signup/login UI.
+Local Fortify authentication uses application sessions. Microsoft sign-in uses server-side OpenID Connect with an explicit tenant allowlist; real-provider acceptance remains required. Microsoft is required for this demo, SWITCH is stretch, Google remains later/unassigned. Laravel owns authentication routes and sessions; React through Inertia supplies signup/login UI.
 
 ## Starter adoption status
 
@@ -21,7 +21,7 @@ The confirmed demo includes verified local signup/login/recovery, Microsoft appr
 
 ## Confirmed admission and provider scope
 
-- Open signup with verification, confirmed by the user. No invitation or manual approval requirement for ordinary community membership. Define verification explicitly: local email requires a one-use expiring verification link; external-provider verification and claim semantics must be checked per provider. Proposed default where no trustworthy verified-email claim is available: collect and verify a contact address before granting community access. Do not universally treat a returned email string as verified.
+- Open signup with verification, confirmed by the user. No invitation or manual approval requirement for ordinary community membership. Define verification explicitly: local email requires a one-use expiring verification link; external-provider verification and claim semantics must be checked per provider. New Microsoft accounts collect and verify a separate contact address before community access. Contact addresses already owned by another account are rejected regardless of case. Do not universally treat a returned email string as verified.
 - Microsoft supports multiple approved company tenants. Use an explicit configured tenant-ID allowlist and reject unapproved tenants even when their tokens are otherwise valid. Personal Microsoft accounts are not requested. Obtain actual allowed tenant IDs and provider registration/consent before live use; never invent them. Actual tenant identifiers, registrations and credentials must never be committed.
 - Institutional SWITCHaai is requested, not merely direct edu-ID. No service registration exists. Confirm eligible service operator/sponsor and start federation/test registration; agree on integration path, metadata, callback/entity identifier and attribute release with the operator. Do not substitute a direct edu-ID button for the requested institutional integration.
 
@@ -33,7 +33,7 @@ Provider setup and SWITCH federation onboarding are implementation dependencies,
 
 ## Account and session model
 
-Retain one internal user identifier independent of email or login provider. Proposed logical records: users/membership status, optional local password credentials, external identities keyed by provider plus validated issuer/tenant and stable subject, and authoritative PostgreSQL sessions. Enforce identity uniqueness transactionally; never use a mutable/display email as the provider identity key.
+Retain one internal user identifier independent of email or login provider. Microsoft identities are uniquely bound to tenant/object and subject, with one internal user per identity. Provider-only users have no local password; contact email is independently verified. Account and identity disablement and tenant removal revoke application access. Sessions remain authoritative in PostgreSQL. Enforce identity uniqueness transactionally; never use a mutable/display email as the provider identity key.
 
 Existing decision retained: no automatic merging or linking when emails match. Multiple login buttons do not imply that a Google, Microsoft and local login belong to one person. Without an explicit verified linking flow, they remain separate identities/accounts, subject to verified open-signup membership checks. Explain this to users. If a unified account with multiple methods is desired, design explicit linking after fresh proof of both identities before enabling it; no silent password addition to federated accounts.
 
@@ -57,7 +57,7 @@ SWITCH requires real test-federation/service validation of metadata and released
 
 ## Tooling and sources
 
-Recommendation: start from Laravel's official React/Inertia starter kit for the application and local auth. Evaluate Socialite for Google and optional GitHub; Microsoft needs a separately evaluated adapter/OIDC integration, and SWITCH needs its own protocol/onboarding choice. Do not assume Socialite alone supports all requested protocols or selects the right claims/policy. No package has been installed or chosen irrevocably.
+Recommendation: start from Laravel's official React/Inertia starter kit for the application and local auth. Evaluate Socialite for Google and optional GitHub; Microsoft uses `facile-it/php-openid-client` for ID-token validation, and SWITCH needs its own protocol/onboarding choice. Do not assume Socialite alone supports all requested protocols or selects the right claims/policy. Only minimal OIDC scopes are requested; provider tokens are not persisted or sent to React.
 
 Primary sources checked 2026-09-26:
 
@@ -68,3 +68,11 @@ Primary sources checked 2026-09-26:
 - [Microsoft single/multitenant applications](https://learn.microsoft.com/en-us/entra/identity-platform/single-and-multi-tenant-apps): account audience choices and tenant scope.
 
 These sources describe integration options, not successful Momento configuration or provider approval.
+
+## Microsoft configuration
+
+Supply `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_REDIRECT_URI` and `MICROSOFT_TENANTS` through protected environment configuration. The tenant map uses organization aliases with `id` and `name` fields. For example, the fictional structure is `{"example":{"id":"11111111-1111-4111-8111-111111111111","name":"Example organization"}}`. Empty or invalid configuration disables Microsoft sign-in.
+
+Register the exact `/auth/microsoft/callback` URI as a Web redirect. HTTPS is required outside loopback development. The flow uses authorization code, S256 PKCE, nonce, expiring one-use state and tenant-specific issuer validation. Request only `openid profile email`; Graph access and offline tokens are not needed. A queue worker delivers contact-verification mail.
+
+Case-insensitive contact-email uniqueness is enforced in the database. Existing case-colliding addresses must be resolved before the uniqueness migration can run; the migration does not choose an owner or rewrite accounts. Reversing the provider-account migration requires removing provider-only accounts first; rollback never invents local passwords.
