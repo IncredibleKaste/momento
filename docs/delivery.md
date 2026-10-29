@@ -6,7 +6,7 @@ Use a short feature branch and a reviewed pull request into develop. Source and 
 
 Pull requests run with read-only repository authority and cannot publish an image. The container workflow is reused so the tested runtime suite has one implementation. No image tar archive is uploaded to public workflow artifacts.
 
-A trusted push to develop or main first passes source checks, then builds and exercises the complete container suite. Only that tested image is published. The publishing job receives a short-lived repository GITHUB_TOKEN with packages:write; no personal publishing token or deployment secret is required. Publication refuses an existing non-private package. New packages are private by default, and the following job verifies their visibility.
+A trusted push to develop or main first passes source checks, then builds and exercises the complete container suite. Only that tested image is published. The publishing job receives a short-lived repository GITHUB_TOKEN with packages:write; no personal publishing token or deployment secret is required. The package must already exist and its metadata must confirm private visibility before any application image is pushed. Missing, inaccessible or non-private packages stop publication; package creation and its visibility must be verified separately. Do not rely on default visibility. The following job verifies visibility again.
 
 A separate fresh job has packages:read only. It proves anonymous access is denied, pulls the canonical image digest and checks the source repository/revision labels. A plain unauthenticated registry 401 is not sufficient proof: public images can also require an anonymous bearer token. The check follows that token path before deciding access is denied.
 
