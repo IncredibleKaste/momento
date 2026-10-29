@@ -10,6 +10,11 @@ class TwoFactorAuthenticationRequest extends FormRequest
 {
     use InteractsWithTwoFactorState;
 
+    public function authorize(): bool
+    {
+        return filled($this->user()->getAuthPassword());
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *

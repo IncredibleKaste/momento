@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PragmaRX\Google2FA\Google2FA;
 use Tests\TestCase;
 
 /*
@@ -47,4 +48,18 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+function twoFactorTestClock(): Google2FA
+{
+    $engine = new class extends Google2FA
+    {
+        public function getTimestamp(): int
+        {
+            return intdiv(now()->timestamp, $this->getKeyRegeneration());
+        }
+    };
+    app()->instance(Google2FA::class, $engine);
+
+    return $engine;
 }

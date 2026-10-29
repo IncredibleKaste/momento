@@ -12,11 +12,13 @@ export type Props = {
     canManageTwoFactor?: boolean;
     requiresConfirmation?: boolean;
     twoFactorEnabled?: boolean;
+    twoFactorPending?: boolean;
 };
 
 export default function ManageTwoFactor(props: Props) {
     const requiresConfirmation = props.requiresConfirmation ?? false;
     const twoFactorEnabled = props.twoFactorEnabled ?? false;
+    const twoFactorPending = props.twoFactorPending ?? false;
 
     const {
         qrCodeSvg,
@@ -35,10 +37,12 @@ export default function ManageTwoFactor(props: Props) {
     useEffect(() => {
         if (prevTwoFactorEnabled.current && !twoFactorEnabled) {
             clearTwoFactorAuthData();
+        } else if (!prevTwoFactorEnabled.current && twoFactorEnabled) {
+            clearSetupData();
         }
 
         prevTwoFactorEnabled.current = twoFactorEnabled;
-    }, [twoFactorEnabled, clearTwoFactorAuthData]);
+    }, [twoFactorEnabled, clearSetupData, clearTwoFactorAuthData]);
 
     if (!(props.canManageTwoFactor ?? false)) {
         return null;
@@ -54,9 +58,9 @@ export default function ManageTwoFactor(props: Props) {
             {twoFactorEnabled ? (
                 <div className="flex flex-col items-start justify-start space-y-4">
                     <p className="text-sm text-muted-foreground">
-                        You will be prompted for a secure, random pin during
-                        login, which you can retrieve from the TOTP-supported
-                        application on your phone.
+                        After signing in with your password, enter the six-digit
+                        code from your authenticator app. Save your recovery
+                        codes before you sign out.
                     </p>
 
                     <div className="relative inline">
@@ -82,14 +86,13 @@ export default function ManageTwoFactor(props: Props) {
             ) : (
                 <div className="flex flex-col items-start justify-start space-y-4">
                     <p className="text-sm text-muted-foreground">
-                        When you enable two-factor authentication, you will be
-                        prompted for a secure pin during login. This pin can be
-                        retrieved from a TOTP-supported application on your
-                        phone.
+                        Add an authenticator app to protect password sign-in.
+                        Protection starts only after you confirm a code. Keep
+                        your device clock set to automatic time.
                     </p>
 
-                    <div>
-                        {hasSetupData ? (
+                    <div className="flex flex-wrap gap-3">
+                        {twoFactorPending || hasSetupData ? (
                             <Button onClick={() => setShowSetupModal(true)}>
                                 <ShieldCheck />
                                 Continue setup
@@ -102,6 +105,19 @@ export default function ManageTwoFactor(props: Props) {
                                 {({ processing }) => (
                                     <Button type="submit" disabled={processing}>
                                         Enable 2FA
+                                    </Button>
+                                )}
+                            </Form>
+                        )}
+                        {twoFactorPending && (
+                            <Form {...disable.form()}>
+                                {({ processing }) => (
+                                    <Button
+                                        variant="outline"
+                                        type="submit"
+                                        disabled={processing}
+                                    >
+                                        Cancel setup
                                     </Button>
                                 )}
                             </Form>

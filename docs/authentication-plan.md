@@ -43,6 +43,10 @@ All successful methods establish the same application session and are subject to
 
 ## Provider-specific trust boundaries
 
+Local authenticator protection starts after a valid six-digit code confirms enrollment. Password sign-in then requires an authenticator code or an unused recovery code. Recovery-code consumption and factor changes are serialized per account; accepted authenticator time steps are consumed atomically in the shared cache. Enrollment secrets and recovery codes remain encrypted at rest.
+
+Viewing or changing factors requires recent authentication (15 minutes by default, configurable through `AUTH_PASSWORD_TIMEOUT`). Regenerating recovery codes invalidates the old set. Password reset does not remove an enrolled factor, and no automated lost-all-factors bypass is provided. An existing passkey with required user verification remains an alternate local sign-in method. Credentialless identities cannot enroll local factors or use local passkeys to bypass provider sign-in. External-provider and real authenticator/device acceptance remain separate verification work.
+
 - Microsoft and Google: browser redirects/callbacks are untrusted inputs; validate the chosen protocol through a maintained library, including transaction binding, exact callback, issuer/audience/expiry and nonce where applicable. Enforce tenant policy for Microsoft. Keep authorization-code exchange and secrets on Laravel.
 - SWITCH: SAML and OIDC are distinct paths. For SAML, require trusted metadata/signatures, audience/recipient/destination, freshness, response correlation and replay prevention; agree on a stable released identifier. If an external SP/proxy terminates SAML, the authenticated-identity handoff is a new trust boundary: strip spoofed headers and prevent direct bypass. No proxy/header design is yet selected.
 - GitHub if adopted: validate the OAuth transaction, retrieve identity through the authenticated provider API and use its stable user ID. Do not assume every OAuth provider returns an OIDC ID token or a public/verified email.
