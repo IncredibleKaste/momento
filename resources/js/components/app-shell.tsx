@@ -1,5 +1,5 @@
 import { usePage } from '@inertiajs/react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import type { AppVariant } from '@/types';
 
@@ -17,5 +17,18 @@ export function AppShell({ children, variant = 'sidebar' }: Props) {
         );
     }
 
-    return <SidebarProvider defaultOpen={isOpen}>{children}</SidebarProvider>;
+    return (
+        <SidebarProvider
+            defaultOpen={isOpen}
+            className="momento-shell"
+            style={
+                {
+                    '--sidebar-width': '14rem',
+                    '--sidebar-width-icon': '5rem',
+                } as CSSProperties
+            }
+        >
+            {children}
+        </SidebarProvider>
+    );
 }
