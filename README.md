@@ -4,7 +4,7 @@ Momento is a photo-sharing application in development. The intended community al
 
 ## Current state
 
-The Laravel + Inertia + React starter is implemented, including local authentication, email verification, password recovery and profile settings. Optional two-factor authentication and passkeys are adopted for local accounts; their combined policy and browser flows still require verification. Photo uploads, approved-follow relationships, the private feed and external identity providers are not implemented. E01 adds a Docker/runtime candidate; deployment is not yet verified.
+The Laravel + Inertia + React starter is implemented, including local authentication, email verification, password recovery and profile settings. Optional two-factor authentication and passkeys are adopted for local accounts; their combined policy and browser flows still require verification. Directional follow requests, approvals and removal now have a management screen and a shared photo-access rule. Photo uploads, the private feed and external identity providers are not implemented in this branch. E01 adds a Docker/runtime candidate; deployment is not yet verified.
 
 The application requires PostgreSQL, Redis and private media storage. Microsoft is the selected required external provider; SWITCH is stretch. The checked-in development example still uses SQLite and database cache; tests use SQLite and in-memory sessions/cache. Do not treat starter defaults as the target deployment architecture.
 
