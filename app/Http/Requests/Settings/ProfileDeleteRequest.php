@@ -10,6 +10,12 @@ class ProfileDeleteRequest extends FormRequest
 {
     use PasswordValidationRules;
 
+    public function authorize(): bool
+    {
+        // Account deletion must include media cleanup before it is available.
+        return false;
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *

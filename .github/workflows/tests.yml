@@ -13,7 +13,6 @@ permissions:
 jobs:
   ci:
     runs-on: ubuntu-latest
-
     services:
       postgres:
         image: postgres:17
@@ -54,6 +53,25 @@ jobs:
 
       - name: Run CI Checks
         run: composer ci:check
+
+      - name: Check authentication with PostgreSQL and Redis
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: momento_test
+          DB_USERNAME: momento_test
+          DB_PASSWORD: ci-only-password
+          SESSION_DRIVER: database
+          CACHE_STORE: redis
+          CACHE_PREFIX: auth-test-${{ github.run_id }}-${{ github.run_attempt }}-
+        run: |
+          php artisan test --compact \
+            tests/Feature/Auth/SessionLifecycleTest.php \
+            tests/Feature/Auth/QueuedAuthenticationMailTest.php \
+            tests/Feature/Auth/AuthenticationRateLimitTest.php \
+            tests/Feature/Auth/ServiceFailureTest.php
+          REDIS_PORT=1 php artisan test --compact \
+            tests/Feature/Auth/ServiceFailureTest.php --filter='an unavailable Redis limiter'
 
       - name: Check follow lifecycle with PostgreSQL and Redis
         env:

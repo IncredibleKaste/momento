@@ -90,7 +90,7 @@ test('verified user is redirected to dashboard from verification prompt', functi
     $response->assertRedirect(route('dashboard', absolute: false));
 });
 
-test('already verified user visiting verification link is redirected without firing event again', function () {
+test('an already used verification link is denied without firing the event again', function () {
     $user = User::factory()->create();
 
     Event::fake();
@@ -102,8 +102,34 @@ test('already verified user visiting verification link is redirected without fir
     );
 
     $this->actingAs($user)->get($verificationUrl)
-        ->assertRedirect(route('dashboard', absolute: false).'?verified=1');
+        ->assertForbidden();
 
     Event::assertNotDispatched(Verified::class);
     expect($user->fresh()->hasVerifiedEmail())->toBeTrue();
+});
+
+test('expired verification links do not verify an account', function () {
+    $this->freezeTime();
+    $user = User::factory()->unverified()->create();
+    $url = URL::temporarySignedRoute('verification.verify', now()->addMinutes(60), [
+        'id' => $user->id, 'hash' => sha1($user->email),
+    ]);
+
+    $this->travel(61)->minutes();
+
+    $this->actingAs($user)->get($url)->assertForbidden();
+    expect($user->fresh()->hasVerifiedEmail())->toBeFalse();
+});
+
+test('verification links require authentication as the matching account', function () {
+    $owner = User::factory()->unverified()->create();
+    $other = User::factory()->unverified()->create();
+    $url = URL::temporarySignedRoute('verification.verify', now()->addMinutes(60), [
+        'id' => $owner->id, 'hash' => sha1($owner->email),
+    ]);
+
+    $this->get($url)->assertRedirect(route('login'));
+    $this->actingAs($other)->get($url)->assertForbidden();
+    expect($owner->fresh()->hasVerifiedEmail())->toBeFalse();
+    expect($other->fresh()->hasVerifiedEmail())->toBeFalse();
 });

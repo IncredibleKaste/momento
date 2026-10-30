@@ -75,3 +75,13 @@ test('users are rate limited', function () {
 
     $response->assertTooManyRequests();
 });
+
+test('authentication rejects a non-string email with validation feedback', function (string $route) {
+    $this->postJson(route($route), [
+        'email' => ['alex@example.test'], 'name' => 'Alex Example',
+        'password' => 'Sample-passphrase-48!', 'password_confirmation' => 'Sample-passphrase-48!',
+    ])->assertUnprocessable()->assertJsonValidationErrors('email');
+
+    expect(User::count())->toBe(0);
+    $this->assertGuest();
+})->with(['login.store', 'register.store']);
