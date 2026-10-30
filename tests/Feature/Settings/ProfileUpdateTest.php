@@ -50,7 +50,7 @@ test('email verification status is unchanged when the email address is unchanged
     expect($user->refresh()->email_verified_at)->not->toBeNull();
 });
 
-test('user can delete their account', function () {
+test('account deletion is forbidden even with the correct password', function () {
     $user = User::factory()->create();
 
     $response = $this
@@ -59,15 +59,13 @@ test('user can delete their account', function () {
             'password' => 'password',
         ]);
 
-    $response
-        ->assertSessionHasNoErrors()
-        ->assertRedirect(route('home'));
+    $response->assertForbidden();
 
-    $this->assertGuest();
-    expect($user->fresh())->toBeNull();
+    $this->assertAuthenticatedAs($user);
+    expect($user->fresh())->not->toBeNull();
 });
 
-test('correct password must be provided to delete account', function () {
+test('account deletion stays forbidden with an incorrect password', function () {
     $user = User::factory()->create();
 
     $response = $this
@@ -77,9 +75,8 @@ test('correct password must be provided to delete account', function () {
             'password' => 'wrong-password',
         ]);
 
-    $response
-        ->assertSessionHasErrors('password')
-        ->assertRedirect(route('profile.edit'));
+    $response->assertForbidden();
 
+    $this->assertAuthenticatedAs($user);
     expect($user->fresh())->not->toBeNull();
 });
