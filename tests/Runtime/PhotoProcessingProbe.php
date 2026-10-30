@@ -120,11 +120,11 @@ try {
             requireProbe(! $processed->getImageProperty('comment'), 'Unexpected retained comment.');
             requireProbe(! str_contains((string) file_get_contents($destination), 'synthetic-privacy-canary'), 'Privacy canary survived.');
             if ($alpha) {
-                requireProbe($processed->getImagePixelColor(63, 31)->getColor(true)['a'] < 0.01, 'Transparency was lost.');
+                requireProbe($processed->getImagePixelColor(63, 31)->getColor(1)['a'] < 0.01, 'Transparency was lost.');
             }
             if ($rotated) {
-                $top = $processed->getImagePixelColor(16, 8)->getColor(true);
-                $bottom = $processed->getImagePixelColor(16, 56)->getColor(true);
+                $top = $processed->getImagePixelColor(16, 8)->getColor(1);
+                $bottom = $processed->getImagePixelColor(16, 56)->getColor(1);
                 requireProbe($top['r'] > 0.8 && $top['b'] < 0.2 && $bottom['b'] > 0.8 && $bottom['r'] < 0.2, 'Rotation put the colour markers in the wrong place.');
             }
         } finally {
