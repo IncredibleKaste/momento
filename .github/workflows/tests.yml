@@ -73,6 +73,20 @@ jobs:
           REDIS_PORT=1 php artisan test --compact \
             tests/Feature/Auth/ServiceFailureTest.php --filter='an unavailable Redis limiter'
 
+      - name: Check follow lifecycle with PostgreSQL and Redis
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: momento_test
+          DB_USERNAME: momento_test
+          DB_PASSWORD: ci-only-password
+          SESSION_DRIVER: database
+          CACHE_STORE: redis
+          CACHE_PREFIX: follow-test-${{ github.run_id }}-${{ github.run_attempt }}-
+          MOMENTO_FOLLOW_CONCURRENCY: '1'
+        run: php artisan test --compact tests/Feature/FollowTest.php tests/Feature/FollowConcurrencyTest.php
+
   container:
     if: github.event_name == 'pull_request'
     permissions:

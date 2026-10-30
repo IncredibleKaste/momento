@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { House, X } from 'lucide-react';
+import { House, UsersRound, X } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -14,6 +14,7 @@ import {
     useSidebar,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
+import { index as following } from '@/routes/following';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -22,6 +23,7 @@ const mainNavItems: NavItem[] = [
         href: dashboard(),
         icon: House,
     },
+    { title: 'Following', href: following(), icon: UsersRound },
 ];
 
 export function AppSidebar() {

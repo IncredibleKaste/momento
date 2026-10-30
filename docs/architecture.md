@@ -16,6 +16,8 @@ The [Docker runtime](runtime.md) serves Laravel and built browser assets using P
 
 ## Current implementation boundary
 
-The authentication/settings starter and E01 runtime foundation exist. Photo posting, follow relationships, the authorized feed and external-provider integrations are not yet implemented. Existing source tests do not establish full authentication/browser or private-photo acceptance.
+The authentication/settings starter and Docker runtime exist. Follow requests support owner approval, decline, cancellation, unfollow and follower removal. Each new request after removal requires fresh approval; photo-access checks query the current relationship. Member links expose only display names and route identity to verified members.
+
+Photo posting, actual media delivery, the authorized feed and external-provider integrations remain separate. The shared follow predicate is covered with synthetic private resources; downstream photo routes must call it on every read. Source tests do not establish live authentication, storage or deployment acceptance.
 
 Use the [authentication plan](authentication-plan.md) for identity policy and [verification record](workflow-assessment.md) for scoped evidence. Actual deployment infrastructure, network and storage arrangements are confidential and are documented outside this repository. Do not infer a hosted topology or availability guarantee from application code.
