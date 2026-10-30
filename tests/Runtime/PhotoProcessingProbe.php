@@ -1,12 +1,43 @@
 <?php
 
 declare(strict_types=1);
+use Symfony\Component\Process\Exception\ProcessTimedOutException;
+use Symfony\Component\Process\Process;
 
 // Synthetic qualification only; this is not the application's upload processor.
 function requireProbe(bool $condition, string $message): void
 {
     if (! $condition) {
         throw new RuntimeException($message);
+    }
+}
+
+/** @return array<int, int> */
+function configureProbeLimits(): array
+{
+    $limits = [
+        Imagick::RESOURCETYPE_MEMORY => 256 * 1024 * 1024,
+        Imagick::RESOURCETYPE_MAP => 512 * 1024 * 1024,
+        Imagick::RESOURCETYPE_DISK => 2 * 1024 * 1024 * 1024,
+        Imagick::RESOURCETYPE_THREAD => 1,
+        Imagick::RESOURCETYPE_TIME => 120,
+    ];
+    foreach ($limits as $resource => $limit) {
+        requireProbe(Imagick::setResourceLimit($resource, $limit), 'Cannot set experimental resource bound.');
+        $limits[$resource] = Imagick::getResourceLimit($resource);
+    }
+
+    return $limits;
+}
+
+if (($argv[1] ?? null) === '--native-timeout-child') {
+    configureProbeLimits();
+    $image = new Imagick;
+    $image->newImage(10000, 5000, '#0000ff');
+    echo 'native-child-started'.PHP_EOL;
+    flush();
+    while (true) {
+        $image->blurImage(0, 4);
     }
 }
 
@@ -40,17 +71,7 @@ $exitCode = 0;
 try {
     requireProbe(extension_loaded('imagick'), 'Imagick is required; no skipped pass.');
     requireProbe(mkdir($directory, 0700), 'Cannot create private probe directory.');
-    $limits = [
-        Imagick::RESOURCETYPE_MEMORY => 256 * 1024 * 1024,
-        Imagick::RESOURCETYPE_MAP => 512 * 1024 * 1024,
-        Imagick::RESOURCETYPE_DISK => 2 * 1024 * 1024 * 1024,
-        Imagick::RESOURCETYPE_THREAD => 1,
-        Imagick::RESOURCETYPE_TIME => 120,
-    ];
-    foreach ($limits as $resource => $limit) {
-        requireProbe(Imagick::setResourceLimit($resource, $limit), 'Cannot set experimental resource bound.');
-        $limits[$resource] = Imagick::getResourceLimit($resource);
-    }
+    $limits = configureProbeLimits();
     echo json_encode([
         'scope' => 'synthetic qualification; camera colour and upload acceptance remain untested',
         'php' => PHP_VERSION,
@@ -143,10 +164,32 @@ try {
         ], JSON_THROW_ON_ERROR).PHP_EOL;
         requireProbe(unlink($destination), 'Processed fixture cleanup failed.');
     }
+    $stage = 'native-subprocess-timeout';
+    require '/app/vendor/autoload.php';
+    $process = new Process([PHP_BINARY, __FILE__, '--native-timeout-child'], timeout: 2);
+    $started = hrtime(true);
+    $timedOut = false;
+    try {
+        $process->run();
+    } catch (ProcessTimedOutException) {
+        $timedOut = true;
+    }
+    $duration = (int) ((hrtime(true) - $started) / 1000000);
+    requireProbe($timedOut, 'Native child did not reach the expected process timeout.');
+    requireProbe(str_contains($process->getOutput(), 'native-child-started'), 'Native child did not start image work.');
+    requireProbe(! $process->isRunning() && $process->getExitCode() !== 0, 'Timed native child is still running or reported success.');
+    requireProbe($duration < 8000, 'Native child termination exceeded the experimental bound.');
+    echo json_encode([
+        'case' => $stage,
+        'result' => 'pass',
+        'duration_ms' => $duration,
+        'scope' => 'timed native subprocess capability; queue worker integration remains untested',
+    ], JSON_THROW_ON_ERROR).PHP_EOL;
+
     $peak = '/sys/fs/cgroup/memory.peak';
     echo json_encode([
         'native_container_peak_bytes' => is_readable($peak) ? (int) file_get_contents($peak) : null,
-        'peak_scope' => 'entire synthetic probe including fixture generation',
+        'peak_scope' => 'entire synthetic probe including fixture generation and timeout child',
     ], JSON_THROW_ON_ERROR).PHP_EOL;
 } catch (Throwable $exception) {
     fwrite(STDERR, 'Synthetic photo probe failed at '.$stage.': '.$exception->getMessage().PHP_EOL);
