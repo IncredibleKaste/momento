@@ -143,7 +143,7 @@ export default function Following({
                             href={show(auth.user.id)}
                             className="underline underline-offset-4"
                         >
-                            Your member link
+                            Your profile
                         </Link>
                         <Link
                             href={index()}

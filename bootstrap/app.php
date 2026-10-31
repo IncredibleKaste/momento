@@ -10,7 +10,9 @@ use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -32,6 +34,19 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (NotFoundHttpException $exception, Request $request): ?Response {
+            if (! $request->routeIs('members.show') || $request->expectsJson()) {
+                return null;
+            }
+
+            $response = Inertia::render('not-found', [
+                'auth' => ['user' => $request->user()?->only('id', 'name')],
+            ])->toResponse($request)->setStatusCode(404);
+            $response->headers->set('Cache-Control', 'private, no-store');
+
+            return $response;
+        });
+
         $exceptions->render(function (Throwable $exception, Request $request): ?Response {
             if (! $exception instanceof PDOException && ! is_a($exception, 'RedisException')) {
                 return null;
