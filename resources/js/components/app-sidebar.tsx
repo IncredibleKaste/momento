@@ -1,5 +1,5 @@
-import { Link } from '@inertiajs/react';
-import { House, UsersRound, X } from 'lucide-react';
+import { Link, usePage } from '@inertiajs/react';
+import { House, UserRound, UsersRound, X } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -15,19 +15,17 @@ import {
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import { index as following } from '@/routes/following';
+import { show as profile } from '@/routes/members';
 import type { NavItem } from '@/types';
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Home',
-        href: dashboard(),
-        icon: House,
-    },
-    { title: 'Following', href: following(), icon: UsersRound },
-];
-
 export function AppSidebar() {
+    const { auth } = usePage().props;
     const { setOpenMobile } = useSidebar();
+    const mainNavItems: NavItem[] = [
+        { title: 'Home', href: dashboard(), icon: House },
+        { title: 'Profile', href: profile(auth.user.id), icon: UserRound },
+        { title: 'Following', href: following(), icon: UsersRound },
+    ];
 
     return (
         <Sidebar collapsible="icon" className="momento-rail">
