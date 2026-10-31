@@ -1,5 +1,5 @@
 import { Link, router } from '@inertiajs/react';
-import { LogOut, Moon, Sun } from 'lucide-react';
+import { LogOut, Monitor, Moon, Sun } from 'lucide-react';
 import {
     DropdownMenuGroup,
     DropdownMenuItem,
@@ -10,6 +10,7 @@ import { UserInfo } from '@/components/user-info';
 import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 import { useAppearance } from '@/hooks/use-appearance';
 import { logout } from '@/routes';
+import { edit as editAppearance } from '@/routes/appearance';
 import type { User } from '@/types';
 
 type Props = {
@@ -46,6 +47,12 @@ export function UserMenuContent({ user }: Props) {
                         ? 'light'
                         : 'dark'}{' '}
                     appearance
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                    <Link href={editAppearance()} onClick={cleanup}>
+                        <Monitor />
+                        Appearance settings
+                    </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                     <Link
