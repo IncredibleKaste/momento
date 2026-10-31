@@ -14,7 +14,7 @@ export default function Appearance() {
                 <Heading
                     variant="small"
                     title="Appearance settings"
-                    description="Update the appearance settings for your account"
+                    description="Choose how Momento looks in this browser. System follows your device’s appearance."
                 />
                 <AppearanceTabs />
             </div>
