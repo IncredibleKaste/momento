@@ -214,7 +214,12 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                             <DropdownMenuTrigger asChild>
                                 <Button
                                     variant="ghost"
-                                    className="size-10 rounded-full p-1"
+                                    className="size-11 rounded-full p-1"
+                                    aria-label={
+                                        auth.user
+                                            ? `${auth.user.name}, account menu`
+                                            : 'Account menu'
+                                    }
                                 >
                                     <Avatar className="size-8 overflow-hidden rounded-full">
                                         <AvatarImage

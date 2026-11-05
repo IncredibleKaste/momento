@@ -50,7 +50,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                 size="sm"
                                 variant="ghost"
                                 asChild
-                                className={cn('w-full justify-start', {
+                                className={cn('min-h-11 w-full justify-start', {
                                     'bg-muted': isCurrentOrParentUrl(item.href),
                                 })}
                             >
