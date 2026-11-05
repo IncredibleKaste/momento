@@ -155,6 +155,21 @@
     --navigation-accent: var(--navigation-blue);
 }
 
+.auth-page :is([data-slot='input'], [data-slot='button'], a) {
+    min-height: 2.75rem;
+}
+
+.auth-page [data-slot='input'] {
+    background-color: var(--card);
+}
+
+.auth-page a {
+    display: inline-flex;
+    min-width: 2.75rem;
+    align-items: center;
+    justify-content: center;
+}
+
 .rail-link[aria-current='page'],
 .rail-link:hover,
 .rail-link:focus-visible {
