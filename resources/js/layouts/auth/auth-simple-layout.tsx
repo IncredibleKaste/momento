@@ -9,29 +9,27 @@ export default function AuthSimpleLayout({
     description,
 }: AuthLayoutProps) {
     return (
-        <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
+        <div className="auth-page flex min-h-svh flex-col items-center justify-center bg-background px-6 py-10 sm:px-8">
             <div className="w-full max-w-sm">
-                <div className="flex flex-col gap-8">
-                    <div className="flex flex-col items-center gap-4">
-                        <Link
-                            href={home()}
-                            className="flex flex-col items-center gap-2 font-medium"
-                        >
-                            <div className="mb-1 flex h-9 w-9 items-center justify-center rounded-md">
-                                <AppLogoIcon className="size-9 fill-current text-[var(--foreground)] dark:text-white" />
-                            </div>
-                            <span className="sr-only">{title}</span>
-                        </Link>
-
-                        <div className="space-y-2 text-center">
-                            <h1 className="text-xl font-medium">{title}</h1>
-                            <p className="text-center text-sm text-muted-foreground">
-                                {description}
-                            </p>
-                        </div>
+                <Link
+                    href={home()}
+                    className="mb-8 gap-3 font-serif text-3xl"
+                    aria-label="Momento home"
+                >
+                    <AppLogoIcon className="size-8 shrink-0" />
+                    Momento
+                </Link>
+                <main>
+                    <div className="mb-8 space-y-3">
+                        <h1 className="font-serif text-3xl leading-tight text-balance">
+                            {title}
+                        </h1>
+                        <p className="text-sm leading-relaxed text-muted-foreground">
+                            {description}
+                        </p>
                     </div>
-                    {children}
-                </div>
+                    <div className="flex flex-col gap-6">{children}</div>
+                </main>
             </div>
         </div>
     );

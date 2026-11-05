@@ -16,6 +16,14 @@ Supply configuration at runtime using a protected operator-owned environment fil
 
 The image defaults to production mode, debug off, stderr logging, PostgreSQL database sessions and Redis cache. Configure the actual mail transport before testing verification/recovery emails. Development `.env.example` defaults do not configure a deployed environment.
 
+Verification and password-reset emails use queued notifications. Use an asynchronous queue connection (the default is `database`) and run a worker with the same application configuration:
+
+```sh
+php artisan queue:work --tries=3 --timeout=60
+```
+
+Mail failures retry with a 60-second backoff, up to three attempts. A request confirmation means delivery was requested; it does not prove inbox delivery. Monitor failed jobs and verify delivery with the configured transport before admitting users. A synchronous queue connection makes mail latency part of public authentication requests and should be reserved for isolated tests.
+
 For a local container smoke test with reachable external PostgreSQL/Redis:
 
 ```sh

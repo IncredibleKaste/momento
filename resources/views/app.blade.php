@@ -1,21 +1,25 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" @class(['dark' => ($appearance ?? 'system') == 'dark'])>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" data-appearance="{{ $appearance ?? 'system' }}" @class(['dark' => ($appearance ?? 'system') == 'dark'])>
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        {{-- Inline script to detect system dark mode preference and apply it immediately --}}
+        {{-- Resolve appearance before styles and application hydration. --}}
         <script>
             (function() {
-                const appearance = '{{ $appearance ?? "system" }}';
-
-                if (appearance === 'system') {
-                    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-                    if (prefersDark) {
-                        document.documentElement.classList.add('dark');
-                    }
+                const root = document.documentElement;
+                const modes = ['light', 'dark', 'system'];
+                let appearance = modes.includes(root.dataset.appearance) ? root.dataset.appearance : 'system';
+                try {
+                    const stored = window.localStorage.getItem('appearance');
+                    if (modes.includes(stored)) appearance = stored;
+                } catch {
+                    // Fall back to the validated cookie or system preference.
                 }
+                const dark = appearance === 'dark' || (appearance === 'system' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                root.dataset.appearance = appearance;
+                root.classList.toggle('dark', dark);
+                root.style.colorScheme = dark ? 'dark' : 'light';
             })();
         </script>
 

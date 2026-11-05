@@ -102,7 +102,7 @@ return [
     |
     */
 
-    'middleware' => ['web', ProtectSecurityCredentials::class, 'throttle:two-factor-management'],
+    'middleware' => ['web', 'throttle:auth-requests', ProtectSecurityCredentials::class, 'throttle:two-factor-management'],
 
     /*
     |--------------------------------------------------------------------------
