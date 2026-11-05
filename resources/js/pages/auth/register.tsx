@@ -36,10 +36,16 @@ export default function Register({ passwordRules }: Props) {
                                     autoComplete="name"
                                     name="name"
                                     placeholder="Full name"
+                                    aria-invalid={Boolean(errors.name)}
+                                    aria-describedby={
+                                        errors.name ? 'name-error' : undefined
+                                    }
                                 />
                                 <InputError
+                                    id="name-error"
                                     message={errors.name}
                                     className="mt-2"
+                                    role="alert"
                                 />
                             </div>
 
@@ -52,8 +58,16 @@ export default function Register({ passwordRules }: Props) {
                                     autoComplete="email"
                                     name="email"
                                     placeholder="email@example.com"
+                                    aria-invalid={Boolean(errors.email)}
+                                    aria-describedby={
+                                        errors.email ? 'email-error' : undefined
+                                    }
                                 />
-                                <InputError message={errors.email} />
+                                <InputError
+                                    id="email-error"
+                                    message={errors.email}
+                                    role="alert"
+                                />
                             </div>
 
                             <div className="grid gap-2">
@@ -65,8 +79,18 @@ export default function Register({ passwordRules }: Props) {
                                     name="password"
                                     placeholder="Password"
                                     passwordrules={passwordRules}
+                                    aria-invalid={Boolean(errors.password)}
+                                    aria-describedby={
+                                        errors.password
+                                            ? 'password-error'
+                                            : undefined
+                                    }
                                 />
-                                <InputError message={errors.password} />
+                                <InputError
+                                    id="password-error"
+                                    message={errors.password}
+                                    role="alert"
+                                />
                             </div>
 
                             <div className="grid gap-2">
@@ -80,9 +104,19 @@ export default function Register({ passwordRules }: Props) {
                                     name="password_confirmation"
                                     placeholder="Confirm password"
                                     passwordrules={passwordRules}
+                                    aria-invalid={Boolean(
+                                        errors.password_confirmation,
+                                    )}
+                                    aria-describedby={
+                                        errors.password_confirmation
+                                            ? 'password-confirmation-error'
+                                            : undefined
+                                    }
                                 />
                                 <InputError
+                                    id="password-confirmation-error"
                                     message={errors.password_confirmation}
+                                    role="alert"
                                 />
                             </div>
 

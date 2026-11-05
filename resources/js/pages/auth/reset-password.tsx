@@ -35,10 +35,16 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
                                 value={email}
                                 className="mt-1 block w-full"
                                 readOnly
+                                aria-invalid={Boolean(errors.email)}
+                                aria-describedby={
+                                    errors.email ? 'email-error' : undefined
+                                }
                             />
                             <InputError
+                                id="email-error"
                                 message={errors.email}
                                 className="mt-2"
+                                role="alert"
                             />
                         </div>
 
@@ -52,8 +58,18 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
                                 autoFocus
                                 placeholder="Password"
                                 passwordrules={passwordRules}
+                                aria-invalid={Boolean(errors.password)}
+                                aria-describedby={
+                                    errors.password
+                                        ? 'password-error'
+                                        : undefined
+                                }
                             />
-                            <InputError message={errors.password} />
+                            <InputError
+                                id="password-error"
+                                message={errors.password}
+                                role="alert"
+                            />
                         </div>
 
                         <div className="grid gap-2">
@@ -67,10 +83,20 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
                                 className="mt-1 block w-full"
                                 placeholder="Confirm password"
                                 passwordrules={passwordRules}
+                                aria-invalid={Boolean(
+                                    errors.password_confirmation,
+                                )}
+                                aria-describedby={
+                                    errors.password_confirmation
+                                        ? 'password-confirmation-error'
+                                        : undefined
+                                }
                             />
                             <InputError
+                                id="password-confirmation-error"
                                 message={errors.password_confirmation}
                                 className="mt-2"
+                                role="alert"
                             />
                         </div>
 
