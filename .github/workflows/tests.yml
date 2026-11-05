@@ -87,6 +87,18 @@ jobs:
           MOMENTO_FOLLOW_CONCURRENCY: '1'
         run: php artisan test --compact tests/Feature/FollowTest.php tests/Feature/FollowConcurrencyTest.php
 
+      - name: Qualify configured PostgreSQL database queue transactions
+        env:
+          APP_ENV: testing
+          MOMENTO_QUEUE_TRANSACTION_PROBE: '1'
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: momento_test
+          DB_USERNAME: momento_test
+          DB_PASSWORD: ci-only-password
+          QUEUE_CONNECTION: database
+        run: php tests/Runtime/PhotoQueueTransactionProbe.php
+
   container:
     if: github.event_name == 'pull_request'
     permissions:
