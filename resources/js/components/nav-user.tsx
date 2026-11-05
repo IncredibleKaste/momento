@@ -15,7 +15,7 @@ import { UserMenuContent } from '@/components/user-menu-content';
 
 export function NavUser() {
     const { auth } = usePage().props;
-    const { isMobile } = useSidebar();
+    const { isMobile, setOpenMobile } = useSidebar();
 
     if (!auth.user) {
         return null;
@@ -40,7 +40,10 @@ export function NavUser() {
                         align="end"
                         side={isMobile ? 'bottom' : 'right'}
                     >
-                        <UserMenuContent user={auth.user} />
+                        <UserMenuContent
+                            user={auth.user}
+                            onNavigate={() => setOpenMobile(false)}
+                        />
                     </DropdownMenuContent>
                 </DropdownMenu>
             </SidebarMenuItem>
