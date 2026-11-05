@@ -98,14 +98,14 @@ function Relationships({
             {(page.prev_page_url || page.next_page_url) && (
                 <nav aria-label={`${title} pages`} className="mt-5 flex gap-3">
                     {page.prev_page_url && (
-                        <Button asChild variant="outline">
+                        <Button asChild variant="outline" className="min-h-11">
                             <Link href={page.prev_page_url} preserveScroll>
                                 Previous
                             </Link>
                         </Button>
                     )}
                     {page.next_page_url && (
-                        <Button asChild variant="outline">
+                        <Button asChild variant="outline" className="min-h-11">
                             <Link href={page.next_page_url} preserveScroll>
                                 Next
                             </Link>
