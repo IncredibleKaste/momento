@@ -1,5 +1,5 @@
 import { Link, router } from '@inertiajs/react';
-import { LogOut, Moon, Sun } from 'lucide-react';
+import { LogOut, Monitor, Moon, Sun } from 'lucide-react';
 import {
     DropdownMenuGroup,
     DropdownMenuItem,
@@ -7,21 +7,21 @@ import {
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { UserInfo } from '@/components/user-info';
-import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 import { useAppearance } from '@/hooks/use-appearance';
 import { logout } from '@/routes';
+import { edit as editAppearance } from '@/routes/appearance';
 import type { User } from '@/types';
 
 type Props = {
     user: User;
+    onNavigate?: () => void;
 };
 
-export function UserMenuContent({ user }: Props) {
-    const cleanup = useMobileNavigation();
+export function UserMenuContent({ user, onNavigate }: Props) {
     const { resolvedAppearance, updateAppearance } = useAppearance();
 
     const handleLogout = () => {
-        cleanup();
+        onNavigate?.();
         router.flushAll();
     };
 
@@ -35,6 +35,7 @@ export function UserMenuContent({ user }: Props) {
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
                 <DropdownMenuItem
+                    className="min-h-11"
                     onSelect={() =>
                         updateAppearance(
                             resolvedAppearance === 'dark' ? 'light' : 'dark',
@@ -47,15 +48,28 @@ export function UserMenuContent({ user }: Props) {
                         : 'dark'}{' '}
                     appearance
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild>
+                <DropdownMenuItem className="min-h-11" asChild>
+                    <Link href={editAppearance()} onClick={onNavigate}>
+                        <Monitor />
+                        Appearance settings
+                    </Link>
+                </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+                <DropdownMenuItem
+                    className="min-h-11"
+                    variant="destructive"
+                    asChild
+                >
                     <Link
-                        className="block w-full cursor-pointer"
+                        className="w-full cursor-pointer"
                         href={logout()}
                         as="button"
                         onClick={handleLogout}
                         data-test="logout-button"
                     >
-                        <LogOut className="mr-2" />
+                        <LogOut />
                         Log out
                     </Link>
                 </DropdownMenuItem>
