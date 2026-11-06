@@ -8,11 +8,8 @@ export type UseTwoFactorAuthReturn = {
     recoveryCodesList: string[];
     hasSetupData: boolean;
     errors: string[];
-    clearErrors: () => void;
     clearSetupData: () => void;
     clearTwoFactorAuthData: () => void;
-    fetchQrCode: () => Promise<void>;
-    fetchSetupKey: () => Promise<void>;
     fetchSetupData: () => Promise<void>;
     fetchRecoveryCodes: () => Promise<void>;
 };
@@ -29,10 +26,6 @@ export const useTwoFactorAuth = (): UseTwoFactorAuthReturn => {
 
     const hasSetupData = qrCodeSvg !== null && manualSetupKey !== null;
 
-    const clearErrors = useCallback((): void => {
-        setErrors([]);
-    }, []);
-
     const clearSetupData = useCallback((): void => {
         setManualSetupKey(null);
         setQrCodeSvg(null);
@@ -46,40 +39,15 @@ export const useTwoFactorAuth = (): UseTwoFactorAuthReturn => {
         setRecoveryCodesList([]);
     }, []);
 
-    const fetchQrCode = useCallback(async (): Promise<void> => {
-        try {
-            const { svg } = (await submit(qrCode())) as {
-                svg: string;
-                url: string;
-            };
-
-            setQrCodeSvg(svg);
-        } catch {
-            setErrors((prev) => [...prev, 'Failed to fetch QR code']);
-            setQrCodeSvg(null);
-        }
-    }, [submit]);
-
-    const fetchSetupKey = useCallback(async (): Promise<void> => {
-        try {
-            const { secretKey: key } = (await submit(secretKey())) as {
-                secretKey: string;
-            };
-
-            setManualSetupKey(key);
-        } catch {
-            setErrors((prev) => [...prev, 'Failed to fetch a setup key']);
-            setManualSetupKey(null);
-        }
-    }, [submit]);
-
     const fetchRecoveryCodes = useCallback(async (): Promise<void> => {
         try {
             setErrors([]);
             const codes = (await submit(recoveryCodes())) as string[];
             setRecoveryCodesList(codes);
         } catch {
-            setErrors((prev) => [...prev, 'Failed to fetch recovery codes']);
+            setErrors([
+                'Could not load recovery codes. Reload Security settings to confirm your password, then try again.',
+            ]);
             setRecoveryCodesList([]);
         }
     }, [submit]);
@@ -87,12 +55,20 @@ export const useTwoFactorAuth = (): UseTwoFactorAuthReturn => {
     const fetchSetupData = useCallback(async (): Promise<void> => {
         try {
             setErrors([]);
-            await Promise.all([fetchQrCode(), fetchSetupKey()]);
+            const [qr, key] = await Promise.all([
+                submit(qrCode()) as Promise<{ svg: string }>,
+                submit(secretKey()) as Promise<{ secretKey: string }>,
+            ]);
+            setQrCodeSvg(qr.svg);
+            setManualSetupKey(key.secretKey);
         } catch {
             setQrCodeSvg(null);
             setManualSetupKey(null);
+            setErrors([
+                'Could not load setup details. Retry, or reload Security settings to confirm your password again.',
+            ]);
         }
-    }, [fetchQrCode, fetchSetupKey]);
+    }, [submit]);
 
     return {
         qrCodeSvg,
@@ -100,11 +76,8 @@ export const useTwoFactorAuth = (): UseTwoFactorAuthReturn => {
         recoveryCodesList,
         hasSetupData,
         errors,
-        clearErrors,
         clearSetupData,
         clearTwoFactorAuthData,
-        fetchQrCode,
-        fetchSetupKey,
         fetchSetupData,
         fetchRecoveryCodes,
     };
