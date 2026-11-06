@@ -31,8 +31,8 @@ function passkeyTestDevice(): array
         ->add(UnsignedIntegerObject::create(1), UnsignedIntegerObject::create(2))
         ->add(UnsignedIntegerObject::create(3), NegativeIntegerObject::create(-7))
         ->add(NegativeIntegerObject::create(-1), UnsignedIntegerObject::create(1))
-        ->add(NegativeIntegerObject::create(-2), ByteStringObject::create($details['ec']['x']))
-        ->add(NegativeIntegerObject::create(-3), ByteStringObject::create($details['ec']['y']));
+        ->add(NegativeIntegerObject::create(-2), ByteStringObject::create(str_pad($details['ec']['x'], 32, "\0", STR_PAD_LEFT)))
+        ->add(NegativeIntegerObject::create(-3), ByteStringObject::create(str_pad($details['ec']['y'], 32, "\0", STR_PAD_LEFT)));
 
     return ['key' => $key, 'id' => random_bytes(32), 'cose' => (string) $cose];
 }
@@ -76,6 +76,37 @@ test('the owner can enroll a real signed passkey and sign in with user verificat
     $assertion = passkeyTestAssertion($options, $device, Base64UrlSafe::encodeUnpadded($user->getPasskeyUserHandle()));
     $this->postJson(route('passkey.login'), ['credential' => $assertion])->assertOk();
     $this->assertAuthenticatedAs($user);
+});
+
+test('a TOTP-enabled local account can use its passkey while password sign-in still needs a factor', function () {
+    $this->freezeTime();
+    $engine = twoFactorTestClock();
+    $secret = 'MFRGGZDFMZTWQ2LK';
+    $user = User::factory()->withTwoFactor()->create(['two_factor_secret' => encrypt($secret)]);
+    $device = passkeyTestDevice();
+    $this->actingAs($user)->withSession(['auth.password_confirmed_at' => now()->timestamp]);
+    $registration = $this->getJson(route('passkey.registration-options'))->assertOk()->json('options');
+    $this->postJson(route('passkey.store'), ['name' => 'Sample device', 'credential' => passkeyTestRegistration($registration, $device)])->assertOk();
+    $this->post(route('logout'));
+
+    $options = $this->getJson(route('passkey.login-options'))->assertOk()->json('options');
+    $assertion = passkeyTestAssertion($options, $device, Base64UrlSafe::encodeUnpadded($user->getPasskeyUserHandle()));
+    $this->postJson(route('passkey.login'), ['credential' => $assertion])->assertOk();
+    $this->assertAuthenticatedAs($user);
+
+    $this->post(route('logout'));
+    $this->post(route('login.store'), ['email' => $user->email, 'password' => 'password'])
+        ->assertRedirect(route('two-factor.login'));
+    $this->assertGuest();
+    $this->postJson(route('two-factor.login.store'), ['code' => $engine->getCurrentOtp($secret)])->assertNoContent();
+    $this->assertAuthenticatedAs($user);
+
+    $this->post(route('logout'));
+    $this->post(route('login.store'), ['email' => $user->email, 'password' => 'password'])
+        ->assertRedirect(route('two-factor.login'));
+    $this->postJson(route('two-factor.login.store'), ['recovery_code' => 'recovery-code-1'])->assertNoContent();
+    $this->assertAuthenticatedAs($user);
+    expect($user->fresh()->recoveryCodes())->not->toContain('recovery-code-1');
 });
 
 test('expired registration cannot add a credential even when its signature is valid', function () {
@@ -220,6 +251,25 @@ test('a passkey confirms only its owner and a login challenge cannot confirm an 
     $this->actingAs($owner)->withSession(['auth.password_confirmed_at' => 0]);
     $this->postJson(route('passkey.confirm'), ['credential' => passkeyTestAssertion($options, $device, Base64UrlSafe::encodeUnpadded($owner->getPasskeyUserHandle()))])
         ->assertUnprocessable()->assertSessionHas('auth.password_confirmed_at', 0);
+});
+
+test('passkey reauthentication can change only its owner’s TOTP recovery codes', function () {
+    $owner = User::factory()->withTwoFactor()->create();
+    $other = User::factory()->withTwoFactor()->create();
+    $device = passkeyTestDevice();
+    $this->actingAs($owner)->withSession(['auth.password_confirmed_at' => now()->timestamp]);
+    $registration = $this->getJson(route('passkey.registration-options'))->assertOk()->json('options');
+    $this->postJson(route('passkey.store'), ['name' => 'Owner device', 'credential' => passkeyTestRegistration($registration, $device)])->assertOk();
+    $this->withSession(['auth.password_confirmed_at' => 0]);
+    $options = $this->getJson(route('passkey.confirm-options'))->assertOk()->json('options');
+    $assertion = passkeyTestAssertion($options, $device, Base64UrlSafe::encodeUnpadded($owner->getPasskeyUserHandle()));
+
+    $this->postJson(route('passkey.confirm'), ['credential' => $assertion])
+        ->assertOk()->assertSessionHas('auth.password_confirmed_at', now()->timestamp);
+    $this->postJson(route('two-factor.regenerate-recovery-codes'), ['user_id' => $other->id])->assertOk();
+
+    expect($owner->fresh()->recoveryCodes())->toHaveCount(8)->not->toContain('recovery-code-1');
+    expect($other->fresh()->recoveryCodes())->toBe(['recovery-code-1']);
 });
 
 test('credentialless identities cannot manage passkeys or sign in with an existing local passkey', function () {
