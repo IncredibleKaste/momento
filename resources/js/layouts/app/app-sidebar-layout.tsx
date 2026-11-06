@@ -17,6 +17,25 @@ export default function AppSidebarLayout({
                 Skip to content
             </a>
             <AppSidebar />
+            <div className="app-corner-ribbon" aria-hidden="true">
+                <div className="app-ribbon-art">
+                    <span className="app-ribbon-track">
+                        <span className="app-ribbon-band" />
+                    </span>
+                    <span className="app-ribbon-track">
+                        <span className="app-ribbon-band" />
+                    </span>
+                    <span className="app-ribbon-track">
+                        <span className="app-ribbon-band" />
+                    </span>
+                    <span className="app-ribbon-track">
+                        <span className="app-ribbon-band" />
+                    </span>
+                    <span className="app-ribbon-track">
+                        <span className="app-ribbon-band" />
+                    </span>
+                </div>
+            </div>
             <AppContent
                 variant="sidebar"
                 id="main-content"
