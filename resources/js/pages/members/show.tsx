@@ -5,6 +5,7 @@ import { useInitials } from '@/hooks/use-initials';
 import { dashboard } from '@/routes';
 import { index } from '@/routes/following';
 import { destroy, store } from '@/routes/follows';
+import { edit } from '@/routes/profile';
 
 type Props = {
     member: { id: number; name: string };
@@ -52,10 +53,18 @@ export default function Member({ member, follow }: Props) {
                     </h1>
                 </header>
                 {own ? (
-                    <p className="text-sm text-muted-foreground">
-                        This is your profile. Share this page’s address so other
-                        Momento members can request to follow you.
-                    </p>
+                    <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">
+                            This is your profile. Share this page’s address so
+                            other Momento members can request to follow you.
+                        </p>
+                        <Link
+                            href={edit()}
+                            className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                        >
+                            Edit profile
+                        </Link>
+                    </div>
                 ) : (
                     <>
                         <p className="text-sm text-muted-foreground">
