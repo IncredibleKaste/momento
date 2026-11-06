@@ -26,6 +26,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
                             <Link
                                 href={item.href}
                                 aria-label={item.title}
+                                data-navigation-destination={item.title.toLowerCase()}
                                 aria-current={
                                     isCurrentUrl(item.href) ? 'page' : undefined
                                 }
