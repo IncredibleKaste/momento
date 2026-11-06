@@ -50,7 +50,10 @@ function Relationships({
 
     return (
         <section aria-label={title} className="min-w-0">
-            <h2 className="mb-3 font-serif text-xl">
+            <h2
+                id={kind === 'following' ? 'people-you-follow' : undefined}
+                className="mb-3 font-serif text-xl"
+            >
                 {title}{' '}
                 <span className="font-sans text-sm text-muted-foreground">
                     ({page.total})

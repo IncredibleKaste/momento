@@ -9,7 +9,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Inertia\Inertia;
-use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response;
 
 class FollowController extends Controller
 {
@@ -17,13 +17,16 @@ class FollowController extends Controller
     {
         $viewer = $request->user();
 
-        return Inertia::render('following/index', [
+        $response = Inertia::render('following/index', [
             'incoming' => $this->relationships($viewer, true, 'pending', 'incomingPage'),
             'outgoing' => $this->relationships($viewer, false, 'pending', 'outgoingPage'),
             'followers' => $this->relationships($viewer, true, 'approved', 'followersPage'),
             'following' => $this->relationships($viewer, false, 'approved', 'followingPage'),
             'status' => $request->session()->get('status'),
-        ]);
+        ])->toResponse($request);
+        $response->headers->set('Cache-Control', 'private, no-store');
+
+        return $response;
     }
 
     public function store(Request $request, User $member, ManageFollows $follows): RedirectResponse

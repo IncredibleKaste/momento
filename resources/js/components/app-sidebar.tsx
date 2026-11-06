@@ -41,7 +41,6 @@ export function AppSidebar() {
                                 href={dashboard()}
                                 aria-label="Momento home"
                                 onClick={() => setOpenMobile(false)}
-                                prefetch
                             >
                                 <AppLogo />
                             </Link>
