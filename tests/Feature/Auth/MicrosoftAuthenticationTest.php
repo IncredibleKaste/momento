@@ -363,9 +363,30 @@ it('revokes existing provider sessions after disablement or tenant removal', fun
     } else {
         $identity->forceFill(['disabled_at' => now()])->save();
     }
-    $this->get(route('dashboard'))->assertForbidden();
+    $this->withHeaders([
+        'Accept' => 'text/html, application/xhtml+xml',
+        'X-Inertia' => 'true',
+        'X-Requested-With' => 'XMLHttpRequest',
+    ])->get(route('dashboard'))
+        ->assertForbidden()
+        ->assertJsonPath('component', 'access-denied')
+        ->assertJsonPath('clearHistory', true)
+        ->assertJsonPath('encryptHistory', true)
+        ->assertJsonPath('props.auth.user', null);
     $this->assertGuest();
+    $this->get(route('dashboard'))->assertRedirectToRoute('login');
 })->with(['tenant', 'account', 'identity']);
+
+it('keeps forced signout JSON denials as JSON 403 responses', function () {
+    $user = User::factory()->create(['disabled_at' => now()]);
+    $this->actingAs($user)
+        ->withHeader('Accept', 'application/json')
+        ->get(route('dashboard'))
+        ->assertForbidden()
+        ->assertJsonMissingPath('component');
+
+    $this->assertGuest();
+});
 
 it('blocks local recovery and credential management for provider-only accounts', function () {
     Notification::fake();

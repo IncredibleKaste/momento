@@ -7,6 +7,7 @@ use App\Services\MicrosoftOidc;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureAccountIsActive
@@ -25,7 +26,20 @@ class EnsureAccountIsActive
                 Auth::logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
-                abort(403);
+
+                if ($request->expectsJson()) {
+                    abort(403);
+                }
+
+                Inertia::share('auth.user', null);
+                Inertia::clearHistory();
+
+                $response = Inertia::render('access-denied')
+                    ->toResponse($request)
+                    ->setStatusCode(403);
+                $response->headers->set('Cache-Control', 'private, no-store');
+
+                return $response;
             }
         }
 
