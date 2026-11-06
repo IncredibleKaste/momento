@@ -10,7 +10,9 @@ use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
+use Webauthn\Exception\WebauthnException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -32,6 +34,10 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->map(WebauthnException::class, fn (WebauthnException $exception) => ValidationException::withMessages([
+            'credential' => __('Unable to verify this passkey. Please try again or use your password.'),
+        ]));
+
         $exceptions->render(function (Throwable $exception, Request $request): ?Response {
             if (! $exception instanceof PDOException && ! is_a($exception, 'RedisException')) {
                 return null;
