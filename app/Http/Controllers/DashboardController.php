@@ -2,9 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Follow;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -14,17 +13,17 @@ class DashboardController extends Controller
     {
         $viewer = $request->user();
 
-        $followedPeople = Follow::query()
-            ->where('follower_id', $viewer->id)
-            ->where('status', 'approved')
-            ->whereHas('followed', fn (Builder $query) => $query->whereNotNull('email_verified_at'))
-            ->with('followed:id,name')
-            ->orderByDesc('id')
+        $followedPeople = DB::table('follows')
+            ->join('users as followed_users', 'follows.followed_id', '=', 'followed_users.id')
+            ->where('follows.follower_id', $viewer->id)
+            ->where('follows.status', 'approved')
+            ->whereNotNull('followed_users.email_verified_at')
+            ->orderByDesc('follows.id')
             ->limit(12)
-            ->get(['id', 'followed_id'])
-            ->map(fn (Follow $follow): array => [
-                'id' => $follow->followed->id,
-                'name' => $follow->followed->name,
+            ->get(['followed_users.id as id', 'followed_users.name as name'])
+            ->map(fn (object $person): array => [
+                'id' => $person->id,
+                'name' => $person->name,
             ])
             ->values();
 
