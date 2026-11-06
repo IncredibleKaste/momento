@@ -2,10 +2,14 @@
 
 namespace App\Providers;
 
+use App\Auth\LocalCredentialUserProvider;
 use App\Models\User;
+use App\Services\MicrosoftOidc;
 use Carbon\CarbonImmutable;
+use GuzzleHttp\Client;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
@@ -20,7 +24,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(MicrosoftOidc::class, fn () => new MicrosoftOidc(new Client([
+            'timeout' => 10, 'connect_timeout' => 3, 'allow_redirects' => false,
+        ])));
     }
 
     /**
@@ -28,6 +34,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Auth::provider('local-credentials', fn ($app, array $config) => new LocalCredentialUserProvider($app['hash'], $config['model']));
         $this->configureDefaults();
         RateLimiter::for('follow-requests', function (Request $request): array {
             $actor = $request->user()->getAuthIdentifier();

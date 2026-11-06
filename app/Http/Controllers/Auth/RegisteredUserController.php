@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Rules\UniqueContactEmail;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
@@ -27,7 +28,9 @@ class RegisteredUserController extends FortifyRegisteredUserController
         try {
             $user = $creator->create($request->all());
         } catch (ValidationException $exception) {
-            if (! isset($exception->validator->failed()['email']['Unique'])) {
+            $emailRules = $exception->validator->failed()['email'] ?? [];
+
+            if (! isset($emailRules['Unique']) && ! isset($emailRules[UniqueContactEmail::class])) {
                 throw $exception;
             }
 

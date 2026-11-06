@@ -16,9 +16,11 @@ type PageProps = {
 
 export default function Profile({
     mustVerifyEmail,
+    canChangeEmail,
     status,
 }: {
     mustVerifyEmail: boolean;
+    canChangeEmail: boolean;
     status?: string;
 }) {
     const { auth } = usePage<PageProps>().props;
@@ -33,7 +35,11 @@ export default function Profile({
                 <Heading
                     variant="small"
                     title="Profile"
-                    description="Update your name and email address"
+                    description={
+                        canChangeEmail
+                            ? 'Update your name and email address'
+                            : 'Update your name. Contact email changes are not available yet.'
+                    }
                 />
 
                 <Form
@@ -76,7 +82,22 @@ export default function Profile({
                                     required
                                     autoComplete="username"
                                     placeholder="Email address"
+                                    readOnly={!canChangeEmail}
+                                    aria-describedby={
+                                        canChangeEmail
+                                            ? undefined
+                                            : 'email-help'
+                                    }
                                 />
+
+                                {!canChangeEmail && (
+                                    <p
+                                        id="email-help"
+                                        className="text-sm text-muted-foreground"
+                                    >
+                                        Read-only for Microsoft-only accounts.
+                                    </p>
+                                )}
 
                                 <InputError
                                     className="mt-2"

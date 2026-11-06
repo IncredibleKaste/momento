@@ -1,5 +1,7 @@
 <?php
 
+$microsoftTenants = env('MICROSOFT_TENANTS', '{}');
+
 return [
 
     /*
@@ -13,6 +15,13 @@ return [
     | a conventional file to locate the various service credentials.
     |
     */
+
+    'microsoft' => [
+        'client_id' => env('MICROSOFT_CLIENT_ID', ''),
+        'client_secret' => env('MICROSOFT_CLIENT_SECRET', ''),
+        'redirect_uri' => env('MICROSOFT_REDIRECT_URI', rtrim(config('app.url'), '/').'/auth/microsoft/callback'),
+        'tenants' => is_string($microsoftTenants) ? (json_decode($microsoftTenants, true) ?: []) : [],
+    ],
 
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),

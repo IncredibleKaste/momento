@@ -10,8 +10,11 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Requests\Auth\VerifyEmailRequest;
 use App\Http\Responses\FailedPasswordResetResponse;
+use App\Http\Responses\LogoutResponse;
 use App\Http\Responses\PasswordResetLinkResponse;
 use App\Http\Responses\RegisterResponse;
+use App\Models\User;
+use App\Services\MicrosoftOidc;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Http\Request;
@@ -21,6 +24,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Laravel\Fortify\Contracts\FailedPasswordResetLinkRequestResponse;
+use Laravel\Fortify\Contracts\LogoutResponse as LogoutResponseContract;
 use Laravel\Fortify\Contracts\SuccessfulPasswordResetLinkRequestResponse;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
@@ -41,6 +45,7 @@ class FortifyServiceProvider extends ServiceProvider
         $this->app->bind(SuccessfulPasswordResetLinkRequestResponse::class, PasswordResetLinkResponse::class);
         $this->app->bind(FailedPasswordResetLinkRequestResponse::class, PasswordResetLinkResponse::class);
         $this->app->bind(\Laravel\Fortify\Contracts\FailedPasswordResetResponse::class, FailedPasswordResetResponse::class);
+        $this->app->bind(LogoutResponseContract::class, LogoutResponse::class);
         $this->app->bind(\Laravel\Fortify\Contracts\RegisterResponse::class, RegisterResponse::class);
         $this->app->bind(\Laravel\Fortify\Http\Controllers\RegisteredUserController::class, RegisteredUserController::class);
         $this->app->bind(\Laravel\Fortify\Http\Controllers\PasswordResetLinkController::class, PasswordResetLinkController::class);
@@ -57,7 +62,7 @@ class FortifyServiceProvider extends ServiceProvider
         $this->configureViews();
         $this->configureRateLimiting();
 
-        Passkeys::authorizeLoginUsing(fn (Request $request, PasskeyUser $user): bool => filled($user->getAuthPassword()));
+        Passkeys::authorizeLoginUsing(fn (Request $request, PasskeyUser $user): bool => $user instanceof User && filled($user->getAuthPassword()) && $user->disabled_at === null);
     }
 
     /**
@@ -75,6 +80,7 @@ class FortifyServiceProvider extends ServiceProvider
     private function configureViews(): void
     {
         Fortify::loginView(fn (Request $request) => Inertia::render('auth/login', [
+            'canMicrosoftLogin' => app(MicrosoftOidc::class)->organizations() !== [],
             'canResetPassword' => Features::enabled(Features::resetPasswords()),
             'status' => $request->session()->get('status'),
         ]));

@@ -1,0 +1,29 @@
+<?php
+
+namespace Facile\OpenIDClient\Service;
+
+use Facile\OpenIDClient\Client\ClientInterface;
+use Facile\OpenIDClient\Session\AuthSessionInterface;
+use Facile\OpenIDClient\Token\TokenSetInterface;
+
+class AuthorizationService
+{
+    /** @param array{code?: string, state?: string, token_type?: string, access_token?: string, id_token?: string, refresh_token?: string, expires_in?: int, code_verifier?: string} $params */
+    public function callback(ClientInterface $client, array $params, ?string $redirectUri = null, ?AuthSessionInterface $authSession = null, ?int $maxAge = null): TokenSetInterface {}
+}
+
+namespace Facile\OpenIDClient\Token;
+
+interface TokenSetInterface
+{
+    /** @return array<string, mixed> */
+    public function claims(): array;
+}
+
+namespace Facile\OpenIDClient\Client;
+
+interface ClientInterface {}
+
+namespace Facile\OpenIDClient\Session;
+
+interface AuthSessionInterface {}

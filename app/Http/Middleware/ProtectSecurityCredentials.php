@@ -13,7 +13,7 @@ class ProtectSecurityCredentials
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $management = ($request->routeIs('two-factor.*') && ! $request->routeIs('two-factor.login*'))
+        $management = $request->routeIs('security.edit', 'password.confirm*') || ($request->routeIs('two-factor.*') && ! $request->routeIs('two-factor.login*'))
             || ($request->routeIs('passkey.*') && ! $request->routeIs('passkey.login*'));
         $challenge = $request->routeIs('two-factor.login.store');
 
@@ -39,9 +39,9 @@ class ProtectSecurityCredentials
             $user = User::query()->lockForUpdate()->find($userId);
 
             if ($management) {
-                abort_unless($user && filled($user->getAuthPassword()), 403);
+                abort_unless($user && filled($user->getAuthPassword()) && $user->disabled_at === null, 403);
                 $request->user()->refresh();
-            } elseif (! $user || blank($user->getAuthPassword()) || ! $user->hasEnabledTwoFactorAuthentication()) {
+            } elseif (! $user || $user->disabled_at || blank($user->getAuthPassword()) || ! $user->hasEnabledTwoFactorAuthentication()) {
                 return app(FailedTwoFactorLoginResponse::class)->toResponse($request);
             }
 

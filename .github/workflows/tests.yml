@@ -29,6 +29,7 @@ jobs:
           - 6379:6379
         options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
 
+
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -71,7 +72,7 @@ jobs:
             tests/Feature/Auth/AuthenticationRateLimitTest.php \
             tests/Feature/Auth/ServiceFailureTest.php
           REDIS_PORT=1 php artisan test --compact \
-            tests/Feature/Auth/ServiceFailureTest.php --filter='an unavailable Redis limiter'
+            tests/Feature/Auth/ServiceFailureTest.php --filter='an unavailable Redis'
 
       - name: Check passkey authentication with PostgreSQL and Redis
         env:
@@ -100,6 +101,20 @@ jobs:
           CACHE_PREFIX: follow-test-${{ github.run_id }}-${{ github.run_attempt }}-
           MOMENTO_FOLLOW_CONCURRENCY: '1'
         run: php artisan test --compact tests/Feature/FollowTest.php tests/Feature/FollowConcurrencyTest.php tests/Feature/MemberProfileTest.php
+
+      - name: Check Microsoft authentication with PostgreSQL and Redis
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: momento_test
+          DB_USERNAME: momento_test
+          DB_PASSWORD: ci-only-password
+          SESSION_DRIVER: database
+          CACHE_STORE: redis
+          CACHE_PREFIX: microsoft-test-${{ github.run_id }}-${{ github.run_attempt }}-
+          MOMENTO_MICROSOFT_CONCURRENCY: '1'
+        run: php artisan test --compact tests/Feature/Auth/MicrosoftAuthenticationTest.php
 
       - name: Check two-factor concurrency with PostgreSQL and Redis
         env:

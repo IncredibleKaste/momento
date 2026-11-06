@@ -3,6 +3,10 @@ includes:
     - vendor/nesbot/carbon/extension.neon
 
 parameters:
+    # The library's Psalm array{} intersections are interpreted as empty arrays by PHPStan.
+    stubFiles:
+        - tests/openid-client.stub
+
     paths:
         - app/
         - bootstrap/app.php

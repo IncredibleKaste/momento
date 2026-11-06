@@ -31,6 +31,7 @@ test('an unavailable Redis limiter denies registration with a retry response', f
         $this->markTestSkipped('Requires the isolated Redis outage process.');
     }
 
+    config(['session.block_store' => 'database']);
     Exceptions::fake([RedisException::class]);
 
     $response = $this->postJson(route('register.store'), [
@@ -53,4 +54,24 @@ test('an unavailable Redis limiter denies registration with a retry response', f
 
     $this->withCookie($cookie, $captured)->get(route('dashboard'))->assertRedirect(route('login'));
     $this->assertGuest();
+});
+
+test('an unavailable Redis session lock returns a retry response before registration', function () {
+    if (config('cache.default') !== 'redis' || (int) config('database.redis.cache.port') !== 1) {
+        $this->markTestSkipped('Requires the isolated Redis outage process.');
+    }
+
+    Exceptions::fake([RedisException::class]);
+
+    $response = $this->postJson(route('register.store'), [
+        'name' => 'Alex Example', 'email' => 'alex@example.test',
+        'password' => 'Sample-passphrase-48!', 'password_confirmation' => 'Sample-passphrase-48!',
+    ])->assertStatus(503)->assertHeader('Retry-After', '60')
+        ->assertExactJson(['message' => 'The service is temporarily unavailable. Please retry in a minute.']);
+
+    Exceptions::assertReported(RedisException::class);
+    $this->assertDatabaseCount('users', 0);
+    $this->assertDatabaseCount('sessions', 0);
+    $this->assertGuest();
+    expect($response->getCookie(config('session.cookie')))->toBeNull();
 });

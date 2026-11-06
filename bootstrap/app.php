@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ReadinessController;
+use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
@@ -29,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
         $middleware->web(append: [
+            EnsureAccountIsActive::class,
             AuthenticateSession::class,
             HandleAppearance::class,
             HandleInertiaRequests::class,
