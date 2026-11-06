@@ -16,14 +16,15 @@ test('simultaneous challenges consume each recovery or authenticator code only o
 
     // Child HTTP kernels need committed fixtures, outside RefreshDatabase's transaction.
     DB::commit();
-    $user = User::factory()->withTwoFactor()->create(['two_factor_secret' => encrypt('JBSWY3DPEHPK3PXP')]);
+    $secret = 'JBSWY3DPEHPK3PQY';
+    $user = User::factory()->withTwoFactor()->create(['two_factor_secret' => encrypt($secret)]);
     $directory = sys_get_temp_dir().'/momento-factor-'.bin2hex(random_bytes(12));
     mkdir($directory, 0700);
     $sessionIds = [];
     expect(config('session.driver'))->toBe('database');
 
     try {
-        foreach (['recovery_code' => 'recovery-code-1', 'code' => app(Google2FA::class)->getCurrentOtp('JBSWY3DPEHPK3PXP')] as $field => $code) {
+        foreach (['recovery_code' => 'recovery-code-1', 'code' => app(Google2FA::class)->getCurrentOtp($secret)] as $field => $code) {
             $tasks = [];
 
             foreach (range(1, 2) as $worker) {
