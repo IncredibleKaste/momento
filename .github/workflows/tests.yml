@@ -72,7 +72,7 @@ jobs:
             tests/Feature/Auth/AuthenticationRateLimitTest.php \
             tests/Feature/Auth/ServiceFailureTest.php
           REDIS_PORT=1 php artisan test --compact \
-            tests/Feature/Auth/ServiceFailureTest.php --filter='an unavailable Redis limiter'
+            tests/Feature/Auth/ServiceFailureTest.php --filter='an unavailable Redis'
 
       - name: Check follow lifecycle with PostgreSQL and Redis
         env:
