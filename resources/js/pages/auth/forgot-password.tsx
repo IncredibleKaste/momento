@@ -15,7 +15,10 @@ export default function ForgotPassword({ status }: { status?: string }) {
             <Head title="Forgot password" />
 
             {status && (
-                <div className="mb-4 text-center text-sm font-medium text-green-600">
+                <div
+                    className="rounded-md border border-border bg-card p-4 text-sm leading-relaxed"
+                    role="status"
+                >
                     {status}
                 </div>
             )}

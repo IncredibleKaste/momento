@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\MicrosoftContactRequest;
 use App\Models\MicrosoftIdentity;
 use App\Models\User;
+use App\Notifications\MicrosoftContactVerification;
 use App\Services\MicrosoftOidc;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -14,10 +15,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Throwable;
 
 class MicrosoftAuthenticationController extends Controller
@@ -90,39 +94,162 @@ class MicrosoftAuthenticationController extends Controller
 
     public function contact(Request $request, MicrosoftOidc $oidc): Response|RedirectResponse
     {
-        $pending = $request->session()->get('microsoft.pending');
-        if (! is_array($pending) || ($pending['expires_at'] ?? 0) <= now()->timestamp || ! $oidc->allowsTenant($pending['tenant_id'])) {
+        $pending = $this->pendingIdentity($request, $oidc);
+        if (! $pending) {
             return $this->failure();
         }
 
-        return Inertia::render('auth/microsoft-contact', ['suggestedName' => $pending['name']]);
+        return Inertia::render('auth/microsoft-contact', [
+            'suggestedName' => $pending['name'],
+            'status' => $request->session()->get('status'),
+        ]);
     }
 
     public function storeContact(MicrosoftContactRequest $request, MicrosoftOidc $oidc): RedirectResponse
     {
-        $pending = $request->session()->pull('microsoft.pending');
+        $pending = $this->pendingIdentity($request, $oidc);
+        if (! $pending) {
+            return $this->failure();
+        }
+
+        $contact = $request->validated();
+        if ($this->contactEmailExists($contact['email']) || MicrosoftIdentity::query()
+            ->where('tenant_id', $pending['tenant_id'])
+            ->where('object_id', $pending['object_id'])
+            ->exists()) {
+            return to_route('microsoft.contact')->with('status', $this->verificationStatus());
+        }
+
+        $pending['contact'] = $contact;
+        $pending['proof'] = Str::random(64);
+        $request->session()->put('microsoft.pending', $pending);
+
+        $expiresAt = min($pending['expires_at'], now()->addMinutes(10)->timestamp);
+        $url = URL::temporarySignedRoute(
+            'microsoft.contact.verify',
+            now()->setTimestamp($expiresAt),
+            ['proof' => $pending['proof']],
+        );
+
         try {
-            if (! is_array($pending) || ($pending['expires_at'] ?? 0) <= now()->timestamp || ! $oidc->allowsTenant($pending['tenant_id'])
-                || ! Cache::add('microsoft:onboarding:'.hash('sha256', $pending['transaction']), true, 1200)) {
-                return $this->failure();
+            Notification::route('mail', $contact['email'])->notify(new MicrosoftContactVerification($url));
+        } catch (TransportExceptionInterface $exception) {
+            report($exception);
+
+            return back()->withErrors(['email' => 'The verification email could not be sent. Please try again in a moment.']);
+        }
+
+        return to_route('microsoft.contact')->with('status', $this->verificationStatus());
+    }
+
+    public function verifyContact(Request $request, string $proof, MicrosoftOidc $oidc): Response|RedirectResponse
+    {
+        $pending = $this->pendingContact($request, $oidc, $proof);
+        if (! $pending) {
+            return $this->failure();
+        }
+
+        return Inertia::render('auth/microsoft-contact-confirm', [
+            'email' => $pending['contact']['email'],
+            'confirmUrl' => $request->fullUrl(),
+        ]);
+    }
+
+    public function completeContact(Request $request, string $proof, MicrosoftOidc $oidc): RedirectResponse
+    {
+        $pending = $this->pendingContact($request, $oidc, $proof);
+        if (! $pending) {
+            return $this->failure();
+        }
+
+        if (! Cache::add('microsoft:contact-proof:'.hash('sha256', $pending['transaction'].':'.$proof), true, 600)) {
+            return $this->failure();
+        }
+
+        try {
+            if ($this->contactEmailExists($pending['contact']['email'])) {
+                $this->clearPendingContact($request, $pending);
+
+                return to_route('microsoft.contact')->with('status', $this->verificationStatus());
             }
-            $user = DB::transaction(function () use ($request, $pending): User {
-                $user = User::create([...$request->validated(), 'password' => null]);
+
+            $user = DB::transaction(function () use ($pending): User {
+                $user = User::create([
+                    ...$pending['contact'],
+                    'password' => null,
+                ]);
+                $user->forceFill(['email_verified_at' => now()])->save();
+
                 $identity = new MicrosoftIdentity;
-                $identity->forceFill(['user_id' => $user->id, 'tenant_id' => $pending['tenant_id'], 'object_id' => $pending['object_id'], 'subject' => $pending['subject']])->save();
+                $identity->forceFill([
+                    'user_id' => $user->id,
+                    'tenant_id' => $pending['tenant_id'],
+                    'object_id' => $pending['object_id'],
+                    'subject' => $pending['subject'],
+                ])->save();
 
                 return $user;
             });
         } catch (UniqueConstraintViolationException) {
-            return $this->failure('This account or contact address is already registered. Sign in with its existing method; accounts are not linked automatically.');
+            $this->clearPendingContact($request, $pending);
+
+            return to_route('microsoft.contact')->with('status', $this->verificationStatus());
         } catch (Throwable) {
             return $this->failure();
         }
+
+        $request->session()->forget('microsoft.pending');
         Auth::login($user);
         $request->session()->regenerate();
         event(new Registered($user));
 
-        return to_route('verification.notice');
+        return to_route('dashboard');
+    }
+
+    /** @return array<string, mixed>|null */
+    private function pendingIdentity(Request $request, MicrosoftOidc $oidc): ?array
+    {
+        $pending = $request->session()->get('microsoft.pending');
+
+        if (! is_array($pending) || ! is_string($pending['tenant_id'] ?? null)
+            || ! is_string($pending['object_id'] ?? null) || ! is_string($pending['subject'] ?? null)
+            || ! is_string($pending['transaction'] ?? null) || ! is_int($pending['expires_at'] ?? null)
+            || $pending['expires_at'] <= now()->timestamp || ! $oidc->allowsTenant($pending['tenant_id'])) {
+            return null;
+        }
+
+        return $pending;
+    }
+
+    /** @return array<string, mixed>|null */
+    private function pendingContact(Request $request, MicrosoftOidc $oidc, string $proof): ?array
+    {
+        $pending = $this->pendingIdentity($request, $oidc);
+        $contact = $pending['contact'] ?? null;
+        if (! $pending || ! is_array($contact) || ! is_string($contact['name'] ?? null)
+            || ! is_string($contact['email'] ?? null) || ! is_string($pending['proof'] ?? null)
+            || ! hash_equals($pending['proof'], $proof)) {
+            return null;
+        }
+
+        return $pending;
+    }
+
+    private function contactEmailExists(string $email): bool
+    {
+        return User::query()->whereRaw('lower(email) = lower(?)', [$email])->exists();
+    }
+
+    /** @param array<string, mixed> $pending */
+    private function clearPendingContact(Request $request, array $pending): void
+    {
+        unset($pending['contact'], $pending['proof']);
+        $request->session()->put('microsoft.pending', $pending);
+    }
+
+    private function verificationStatus(): string
+    {
+        return 'If this address is eligible, check its inbox for a verification link. Open it in this browser session; submit the form again if you need a fresh link.';
     }
 
     private function failure(string $message = 'Microsoft sign-in could not be completed. Please try again.'): RedirectResponse

@@ -10,8 +10,10 @@ import { store } from '@/routes/microsoft/contact';
 
 export default function MicrosoftContact({
     suggestedName,
+    status,
 }: {
     suggestedName: string;
+    status?: string;
 }) {
     const name = useRef<HTMLInputElement>(null);
     const email = useRef<HTMLInputElement>(null);
@@ -21,10 +23,15 @@ export default function MicrosoftContact({
             <Head title="Verify your contact email" />
             <p className="mb-6 text-sm text-muted-foreground">
                 Microsoft confirmed your identity. Choose a contact email for
-                your new Momento account. We’ll send a verification link before
-                you can enter the community. This does not link an existing
-                account.
+                your Momento account. We will create the account only after you
+                confirm the address. Open the verification link in this same
+                browser session. Existing accounts are never linked.
             </p>
+            {status && (
+                <p role="status" aria-live="polite" className="mb-6 text-sm">
+                    {status}
+                </p>
+            )}
             <Form
                 {...store.form()}
                 className="flex flex-col gap-6"
@@ -49,8 +56,16 @@ export default function MicrosoftContact({
                                 autoComplete="name"
                                 required
                                 autoFocus
+                                aria-invalid={Boolean(errors.name)}
+                                aria-describedby={
+                                    errors.name ? 'name-error' : undefined
+                                }
                             />
-                            <InputError message={errors.name} />
+                            <InputError
+                                id="name-error"
+                                message={errors.name}
+                                role="alert"
+                            />
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="email">Contact email</Label>
@@ -62,20 +77,28 @@ export default function MicrosoftContact({
                                 maxLength={255}
                                 autoComplete="email"
                                 required
-                                aria-describedby="contact-help"
+                                aria-invalid={Boolean(errors.email)}
+                                aria-describedby={
+                                    errors.email
+                                        ? 'contact-help email-error'
+                                        : 'contact-help'
+                                }
                             />
                             <p
                                 id="contact-help"
                                 className="text-sm text-muted-foreground"
                             >
-                                Use an address you can open. It must not already
-                                belong to another Momento account.
+                                Use an address you can access. Existing accounts
+                                are not linked to Microsoft sign-in.
                             </p>
-                            <InputError message={errors.email} />
+                            <InputError
+                                id="email-error"
+                                message={errors.email}
+                                role="alert"
+                            />
                         </div>
                         <Button disabled={processing}>
-                            {processing && <Spinner />}Create account and verify
-                            email
+                            {processing && <Spinner />}Send verification link
                         </Button>
                         <Button asChild variant="ghost">
                             <Link href={login()}>Cancel</Link>

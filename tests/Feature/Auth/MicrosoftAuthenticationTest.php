@@ -2,6 +2,7 @@
 
 use App\Models\MicrosoftIdentity;
 use App\Models\User;
+use App\Notifications\MicrosoftContactVerification;
 use App\Notifications\VerifyEmail;
 use App\Services\MicrosoftOidc;
 use GuzzleHttp\Client;
@@ -15,16 +16,21 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Concurrency;
+use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
-use Illuminate\Support\Facades\URL;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Passkeys\Passkey;
 use Laravel\Passkeys\Passkeys;
+use Symfony\Component\Mailer\Exception\TransportException;
+use Symfony\Component\Mailer\SentMessage;
+use Symfony\Component\Mailer\Transport\AbstractTransport;
 
 const MICROSOFT_TEST_TENANT = '11111111-1111-4111-8111-111111111111';
 const MICROSOFT_TEST_CLIENT = '22222222-2222-4222-8222-222222222222';
 const MICROSOFT_TEST_OBJECT = '33333333-3333-4333-8333-333333333333';
+const MICROSOFT_CONTACT_STATUS = 'If this address is eligible, check its inbox for a verification link. Open it in this browser session; submit the form again if you need a fresh link.';
 
 beforeEach(function () {
     $addressHash = hash('sha256', $this->nameWithDataSet());
@@ -91,6 +97,18 @@ function beginMicrosoft($test, array $changes = [], bool $badSignature = false):
     return [route('microsoft.callback', ['state' => $transaction['state'], 'code' => 'test-authorization-code']), $stub, $transaction, $response];
 }
 
+function microsoftContactVerificationUrl(string $email): string
+{
+    $url = null;
+    Notification::assertSentOnDemand(MicrosoftContactVerification::class, function ($notification, array $channels, $notifiable) use (&$url, $email): bool {
+        $url = $notification->url;
+
+        return $channels === ['mail'] && $notifiable->routeNotificationFor('mail') === $email;
+    });
+
+    return $url ?? throw new RuntimeException('No matching contact verification notification was captured.');
+}
+
 it('binds authorization to an approved organization with nonce and S256 and no Graph scopes', function () {
     [, , $transaction, $response] = beginMicrosoft($this);
     parse_str(parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
@@ -99,24 +117,34 @@ it('binds authorization to an approved organization with nonce and S256 and no G
     $this->get(route('microsoft.index'))->assertInertia(fn (Assert $page) => $page->component('auth/microsoft')->has('organizations', 1)->missing('client_secret')->missing('tenant_id'));
 });
 
-it('provisions a passwordless account only after contact collection and requires email verification', function () {
+it('creates a verified passwordless account only after signed contact proof', function () {
     Notification::fake();
     [$callback, $stub, $transaction] = beginMicrosoft($this);
     $this->get($callback)->assertRedirectToRoute('microsoft.contact')->assertSessionMissing('microsoft.transaction');
     $this->assertGuest();
     expect(User::count())->toBe(0);
     $this->get(route('microsoft.contact'))->assertInertia(fn (Assert $page) => $page->component('auth/microsoft-contact')->where('suggestedName', 'Alex Example')->missing('tenant_id')->missing('subject')->missing('id_token'));
-    $this->post(route('microsoft.contact.store'), ['name' => 'Alex Example', 'email' => ' Contact@Example.Test '])->assertRedirectToRoute('verification.notice');
+    $this->post(route('microsoft.contact.store'), ['name' => 'Alex Example', 'email' => ' Contact@Example.Test '])
+        ->assertRedirectToRoute('microsoft.contact')
+        ->assertSessionHas('status', MICROSOFT_CONTACT_STATUS);
+    expect(User::count())->toBe(0);
+    expect(MicrosoftIdentity::count())->toBe(0);
+    $url = microsoftContactVerificationUrl('contact@example.test');
+    $this->get($url)->assertInertia(fn (Assert $page) => $page->component('auth/microsoft-contact-confirm')->where('email', 'contact@example.test'));
+    expect(User::count())->toBe(0);
+    expect(MicrosoftIdentity::count())->toBe(0);
+    $this->post($url)->assertRedirectToRoute('dashboard');
     $user = User::sole();
     expect($user->email)->toBe('contact@example.test');
     expect($user->password)->toBeNull();
-    expect($user->email_verified_at)->toBeNull();
+    expect($user->email_verified_at)->not->toBeNull();
     expect(MicrosoftIdentity::sole()->user_id)->toBe($user->id);
-    Notification::assertSentTo($user, VerifyEmail::class);
-    $this->get(route('dashboard'))->assertRedirectToRoute('verification.notice');
-    $url = URL::temporarySignedRoute('verification.verify', now()->addMinutes(10), ['id' => $user->id, 'hash' => sha1($user->email)]);
-    $this->get($url)->assertRedirect();
+    Notification::assertNotSentTo($user, VerifyEmail::class);
     $this->get(route('dashboard'))->assertOk();
+    $this->post(route('logout'))->assertRedirect();
+    $this->get($url)->assertRedirectToRoute('login');
+    expect(User::count())->toBe(1);
+    expect(MicrosoftIdentity::count())->toBe(1);
     $tokenRequest = collect($stub->requests)->first(fn ($request) => $request->getMethod() === 'POST');
     parse_str((string) $tokenRequest->getBody(), $body);
     expect($body)->toMatchArray(['code' => 'test-authorization-code', 'code_verifier' => $transaction['code_verifier'], 'redirect_uri' => 'http://localhost/auth/microsoft/callback']);
@@ -177,18 +205,142 @@ it('rejects absent or mismatched state and consent denial without exposing provi
     $this->get($callback.'&error=access_denied&error_description=private-provider-error')->assertRedirectToRoute('login')->assertSessionHasErrors(['microsoft' => 'Microsoft sign-in was cancelled or declined. You can try again.']);
 });
 
-it('does not link an existing email or reuse an already owned identity', function () {
-    User::factory()->create(['email' => 'existing@example.test']);
+it('returns a neutral response for a contact email collision without sending mail', function () {
+    $existing = User::factory()->create(['email' => 'existing@example.test']);
+    $originalPassword = $existing->password;
+    Notification::fake();
     [$callback] = beginMicrosoft($this);
     $this->get($callback)->assertRedirectToRoute('microsoft.contact');
+
+    $this->post(route('microsoft.contact.store'), ['name' => 'Alex', 'email' => 'separate@example.test'])
+        ->assertRedirectToRoute('microsoft.contact')
+        ->assertSessionHas('status', MICROSOFT_CONTACT_STATUS);
+    $proofUrl = microsoftContactVerificationUrl('separate@example.test');
     $pending = session('microsoft.pending');
-    $this->post(route('microsoft.contact.store'), ['name' => 'Alex', 'email' => 'existing@example.test'])->assertSessionHasErrors('email');
-    $this->assertGuest();
+
+    $this->post(route('microsoft.contact.store'), ['name' => 'Alex', 'email' => 'existing@example.test'])
+        ->assertRedirectToRoute('microsoft.contact')
+        ->assertSessionHas('status', MICROSOFT_CONTACT_STATUS);
+
+    expect(session('microsoft.pending.contact.email'))->toBe('separate@example.test')
+        ->and(session('microsoft.pending.proof'))->toBe($pending['proof']);
+    Notification::assertSentOnDemandTimes(MicrosoftContactVerification::class, 1);
+
+    $this->get($proofUrl)->assertInertia(fn (Assert $page) => $page->component('auth/microsoft-contact-confirm'));
+    $this->post($proofUrl)->assertRedirectToRoute('dashboard');
+
+    $providerUser = User::where('email', 'separate@example.test')->sole();
+    expect($providerUser->password)->toBeNull()
+        ->and($providerUser->email_verified_at)->not->toBeNull()
+        ->and($existing->fresh()->password)->toBe($originalPassword)
+        ->and(MicrosoftIdentity::where('user_id', $providerUser->id)->count())->toBe(1);
+    expect($existing->fresh()->email)->toBe('existing@example.test');
+});
+
+it('does not reserve an address before proof so its owner can register locally', function () {
+    Notification::fake();
+    [$callback] = beginMicrosoft($this);
+    $this->get($callback)->assertRedirectToRoute('microsoft.contact');
+    $this->post(route('microsoft.contact.store'), ['name' => 'Attacker-chosen name', 'email' => 'victim@example.test'])
+        ->assertRedirectToRoute('microsoft.contact');
+    $proofUrl = microsoftContactVerificationUrl('victim@example.test');
+    expect(User::count())->toBe(0);
     expect(MicrosoftIdentity::count())->toBe(0);
-    MicrosoftIdentity::factory()->create(['tenant_id' => MICROSOFT_TEST_TENANT, 'object_id' => MICROSOFT_TEST_OBJECT, 'subject' => 'test-subject']);
-    $this->withSession(['microsoft.pending' => $pending])->post(route('microsoft.contact.store'), ['name' => 'Alex', 'email' => 'separate@example.test'])->assertRedirectToRoute('login');
-    expect(User::count())->toBe(2);
+
+    $this->postJson(route('register.store'), [
+        'name' => 'Address owner',
+        'email' => 'victim@example.test',
+        'password' => 'Sample-passphrase-48!',
+        'password_confirmation' => 'Sample-passphrase-48!',
+    ])->assertAccepted();
+    $owner = User::where('email', 'victim@example.test')->sole();
+    $originalPassword = $owner->password;
+
+    $this->get($proofUrl)->assertInertia(fn (Assert $page) => $page->component('auth/microsoft-contact-confirm'));
+    $this->post($proofUrl)->assertRedirectToRoute('microsoft.contact')->assertSessionHas('status');
+
     $this->assertGuest();
+    expect(User::count())->toBe(1);
+    expect($owner->fresh()->password)->toBe($originalPassword);
+    expect(MicrosoftIdentity::count())->toBe(0);
+});
+
+it('binds proof to the same pending Microsoft session and rejects expired or replaced links', function () {
+    Notification::fake();
+    [$callback] = beginMicrosoft($this);
+    $this->get($callback)->assertRedirectToRoute('microsoft.contact');
+    $this->post(route('microsoft.contact.store'), ['name' => 'Alex', 'email' => 'first@example.test'])
+        ->assertRedirectToRoute('microsoft.contact');
+    $oldUrl = microsoftContactVerificationUrl('first@example.test');
+    $pending = session('microsoft.pending');
+
+    $this->withSession(['microsoft.pending' => []])->post($oldUrl)->assertRedirectToRoute('login');
+    expect(User::count())->toBe(0);
+    expect(MicrosoftIdentity::count())->toBe(0);
+
+    $this->withSession(['microsoft.pending' => $pending]);
+    $this->post(route('microsoft.contact.store'), ['name' => 'Alex', 'email' => 'second@example.test'])
+        ->assertRedirectToRoute('microsoft.contact');
+    $newUrl = microsoftContactVerificationUrl('second@example.test');
+    $this->post($oldUrl)->assertRedirectToRoute('login');
+    expect(User::count())->toBe(0);
+    expect(MicrosoftIdentity::count())->toBe(0);
+
+    $this->get($newUrl)->assertInertia(fn (Assert $page) => $page->component('auth/microsoft-contact-confirm'));
+    $this->travel(11)->minutes();
+    $this->post($newUrl)->assertForbidden();
+    expect(User::count())->toBe(0);
+    expect(MicrosoftIdentity::count())->toBe(0);
+});
+
+it('keeps provider-only onboarding unpersisted when verification mail fails', function () {
+    config(['queue.default' => 'sync', 'mail.default' => 'failing', 'mail.mailers.failing' => ['transport' => 'failing']]);
+    Mail::extend('failing', fn () => new class extends AbstractTransport
+    {
+        protected function doSend(SentMessage $message): void
+        {
+            throw new TransportException('Synthetic mail transport unavailable');
+        }
+
+        public function __toString(): string
+        {
+            return 'failing';
+        }
+    });
+    Exceptions::fake([TransportException::class]);
+    [$callback] = beginMicrosoft($this);
+    $this->get($callback)->assertRedirectToRoute('microsoft.contact');
+
+    $this->post(route('microsoft.contact.store'), ['name' => 'Alex', 'email' => 'contact@example.test'])
+        ->assertSessionHasErrors('email');
+
+    $this->assertGuest();
+    expect(User::count())->toBe(0);
+    expect(MicrosoftIdentity::count())->toBe(0);
+    expect(session('microsoft.pending.contact.email'))->toBe('contact@example.test');
+    Exceptions::assertReported(TransportException::class);
+});
+
+it('does not reuse an identity that became owned before contact proof', function () {
+    Notification::fake();
+    [$callback] = beginMicrosoft($this);
+    $this->get($callback)->assertRedirectToRoute('microsoft.contact');
+    $identityOwner = User::factory()->create(['password' => null]);
+    MicrosoftIdentity::factory()->create([
+        'user_id' => $identityOwner->id,
+        'tenant_id' => MICROSOFT_TEST_TENANT,
+        'object_id' => MICROSOFT_TEST_OBJECT,
+        'subject' => 'test-subject',
+    ]);
+
+    $this->post(route('microsoft.contact.store'), ['name' => 'Alex', 'email' => 'separate@example.test'])
+        ->assertRedirectToRoute('microsoft.contact')
+        ->assertSessionHas('status');
+
+    $this->assertGuest();
+    expect(User::count())->toBe(1);
+    expect(MicrosoftIdentity::count())->toBe(1);
+    Notification::assertNothingSent();
 });
 
 it('denies disabled or reassigned identities', function (string $condition) {
@@ -219,7 +371,8 @@ it('blocks local recovery and credential management for provider-only accounts',
     Notification::fake();
     $user = User::factory()->create(['password' => null]);
     MicrosoftIdentity::factory()->create(['user_id' => $user->id, 'tenant_id' => MICROSOFT_TEST_TENANT]);
-    $this->post(route('password.email'), ['email' => $user->email])->assertSessionHasErrors('email');
+    $this->post(route('password.email'), ['email' => $user->email])
+        ->assertSessionHas('status', 'If an eligible account exists, check its inbox for a reset link. If it does not arrive, wait a minute and try again.');
     Notification::assertNothingSent();
     $token = Password::createToken($user);
     $this->post(route('password.update'), ['email' => $user->email, 'token' => $token, 'password' => 'Sample-passphrase-48!', 'password_confirmation' => 'Sample-passphrase-48!'])->assertSessionHasErrors('email');
@@ -235,6 +388,9 @@ it('fails closed when the provider or shared transaction store is unavailable', 
     if ($failure === 'provider') {
         $stub->status = 503;
     } else {
+        $store = app('cache')->store();
+        Cache::shouldReceive('driver')->andReturn($store);
+        Cache::shouldReceive('store')->andReturn($store);
         Cache::shouldReceive('add')->once()->andThrow(new RuntimeException('private cache details'));
     }
     $this->get($callback)->assertRedirectToRoute('login')->assertSessionHasErrors(['microsoft' => 'Microsoft sign-in could not be completed. Please try again.']);
@@ -254,9 +410,14 @@ it('cannot consume onboarding twice even from a restored session snapshot', func
     [$callback] = beginMicrosoft($this);
     $this->get($callback)->assertRedirectToRoute('microsoft.contact');
     $pending = session('microsoft.pending');
-    $this->post(route('microsoft.contact.store'), ['name' => 'Alex', 'email' => 'first@example.test'])->assertRedirectToRoute('verification.notice');
+    $this->post(route('microsoft.contact.store'), ['name' => 'Alex', 'email' => 'first@example.test'])
+        ->assertRedirectToRoute('microsoft.contact');
+    $proofUrl = microsoftContactVerificationUrl('first@example.test');
+    expect(User::count())->toBe(0);
+    expect(MicrosoftIdentity::count())->toBe(0);
+    $this->post($proofUrl)->assertRedirectToRoute('dashboard');
     $this->post(route('logout'))->assertRedirect();
-    $this->withSession(['microsoft.pending' => $pending])->post(route('microsoft.contact.store'), ['name' => 'Alex', 'email' => 'second@example.test'])->assertRedirectToRoute('login');
+    $this->withSession(['microsoft.pending' => $pending])->post($proofUrl)->assertRedirectToRoute('login');
     expect(User::count())->toBe(1);
     expect(MicrosoftIdentity::count())->toBe(1);
     $this->assertGuest();
@@ -276,6 +437,8 @@ it('requires CSRF protection before starting sign-in or submitting contact detai
     app()->instance('env', 'local');
     $this->post(route('microsoft.start', 'example'))->assertStatus(419);
     $this->post(route('microsoft.contact.store'), ['name' => 'Alex', 'email' => 'contact@example.test'])->assertStatus(419);
+    $proofUrl = URL::temporarySignedRoute('microsoft.contact.verify', now()->addMinute(), ['proof' => 'test-proof']);
+    $this->post($proofUrl)->assertStatus(419);
     expect(User::count())->toBe(0);
 });
 
@@ -299,7 +462,7 @@ it('denies malformed configuration without exposing secrets or identities', func
     [['services.microsoft.tenants.example.id' => MicrosoftOidc::CONSUMER_TENANT]],
 ]);
 
-it('admits only one simultaneous signed callback or identity registration', function (string $phase) {
+it('admits only one simultaneous signed callback or contact proof', function (string $phase) {
     if (getenv('MOMENTO_MICROSOFT_CONCURRENCY') !== '1' || config('database.default') !== 'pgsql') {
         $this->markTestSkipped('Requires an isolated PostgreSQL concurrency fixture.');
     }
@@ -311,9 +474,13 @@ it('admits only one simultaneous signed callback or identity registration', func
     try {
         [$callback, $stub, $transaction] = beginMicrosoft($this);
         app(MicrosoftOidc::class)->identity(MICROSOFT_TEST_TENANT, 'test-authorization-code', $transaction);
-        if ($phase === 'registration') {
+        $proofUrl = null;
+        if ($phase === 'proof') {
+            Notification::fake();
             $this->get($callback)->assertRedirectToRoute('microsoft.contact');
-            $this->get(route('microsoft.contact'))->assertOk();
+            $this->post(route('microsoft.contact.store'), ['name' => 'Concurrent Example', 'email' => $email])
+                ->assertRedirectToRoute('microsoft.contact');
+            $proofUrl = microsoftContactVerificationUrl($email);
         }
         [$token, $jwks] = microsoftToken($stub->claims);
         $initial = session()->all();
@@ -323,9 +490,8 @@ it('admits only one simultaneous signed callback or identity registration', func
         $encrypter = app(Encrypter::class);
         $cookies = [];
         foreach ([1, 2] as $worker) {
-            if ($phase === 'registration') {
-                // Distinct valid transactions must still converge on one identity owner.
-                $initial['microsoft']['pending']['transaction'] = bin2hex(random_bytes(32));
+            if ($phase === 'proof') {
+                // Distinct sessions replaying one proof must still create a single account.
                 $sessionId = bin2hex(random_bytes(20));
                 $ids[] = $sessionId;
             }
@@ -338,7 +504,7 @@ it('admits only one simultaneous signed callback or identity registration', func
         $tasks = [];
         foreach ([1, 2] as $worker) {
             $cookie = $cookies[$worker];
-            $tasks[] = Closure::bind(static function () use ($directory, $worker, $phase, $callback, $token, $name, $cookie, $settings, $email, $initial): array {
+            $tasks[] = Closure::bind(static function () use ($directory, $worker, $phase, $callback, $proofUrl, $token, $name, $cookie, $settings): array {
                 config(['services.microsoft' => $settings]);
                 app()->instance(MicrosoftOidc::class, new MicrosoftOidc(new Client(['handler' => new MockHandler([
                     new Response(200, ['Content-Type' => 'application/json'], json_encode(['id_token' => $token, 'token_type' => 'Bearer'])),
@@ -351,8 +517,7 @@ it('admits only one simultaneous signed callback or identity registration', func
                     }
                     usleep(10000);
                 }
-                $request = Request::create($phase === 'callback' ? $callback : '/auth/microsoft/contact', $phase === 'callback' ? 'GET' : 'POST',
-                    $phase === 'callback' ? [] : ['name' => 'Concurrent Example', 'email' => $email, '_token' => $initial['_token']], [$name => $cookie]);
+                $request = Request::create($phase === 'callback' ? $callback : $proofUrl, $phase === 'callback' ? 'GET' : 'POST', [], [$name => $cookie]);
                 $kernel = app(Kernel::class);
                 $response = $kernel->handle($request);
                 $kernel->terminate($request, $response);
@@ -368,10 +533,7 @@ it('admits only one simultaneous signed callback or identity registration', func
         if ($phase === 'callback') {
             expect($locations)->toBe(['/auth/microsoft/contact', '/login']);
         } else {
-            expect(array_count_values($locations)['/email/verify'] ?? 0)->toBe(1);
-            $denied = array_values(array_diff($locations, ['/email/verify']));
-            expect($denied)->toHaveCount(1);
-            expect($denied[0])->toBeIn(['/login', '/auth/microsoft/contact']);
+            expect($locations)->toBe(['/dashboard', '/login']);
         }
         expect(User::where('email', $email)->count())->toBe($phase === 'callback' ? 0 : 1);
         expect(MicrosoftIdentity::where('tenant_id', MICROSOFT_TEST_TENANT)->where('object_id', MICROSOFT_TEST_OBJECT)->count())->toBe($phase === 'callback' ? 0 : 1);
@@ -384,14 +546,150 @@ it('admits only one simultaneous signed callback or identity registration', func
         rmdir($directory);
         DB::beginTransaction();
     }
-})->with(['callback', 'registration']);
+})->with(['callback', 'proof']);
+
+it('serializes a slow contact GET with a contact update for the same session', function () {
+    if (getenv('MOMENTO_MICROSOFT_CONCURRENCY') !== '1' || config('database.default') !== 'pgsql') {
+        $this->markTestSkipped('Requires an isolated PostgreSQL concurrency fixture.');
+    }
+
+    DB::commit();
+    Notification::fake();
+    $directory = sys_get_temp_dir().'/momento-microsoft-session-'.bin2hex(random_bytes(12));
+    mkdir($directory, 0700);
+    $ids = [];
+    $oldEmail = 'before-'.bin2hex(random_bytes(8)).'@example.test';
+    $newEmail = 'after-'.bin2hex(random_bytes(8)).'@example.test';
+
+    try {
+        [$callback] = beginMicrosoft($this);
+        $this->get($callback)->assertRedirectToRoute('microsoft.contact');
+        $this->post(route('microsoft.contact.store'), ['name' => 'Concurrent Example', 'email' => $oldEmail])
+            ->assertRedirectToRoute('microsoft.contact');
+        $oldProofUrl = microsoftContactVerificationUrl($oldEmail);
+        $oldProof = session('microsoft.pending.proof');
+
+        $sessionId = session()->getId();
+        $ids[] = $sessionId;
+        $sessionName = config('session.cookie');
+        $encrypter = app(Encrypter::class);
+        $cookie = $encrypter->encrypt(CookieValuePrefix::create($sessionName, $encrypter->getKey()).$sessionId, false);
+        DB::table('sessions')->updateOrInsert(['id' => $sessionId], [
+            'user_id' => null,
+            'payload' => base64_encode(json_encode(session()->all(), JSON_THROW_ON_ERROR)),
+            'last_activity' => now()->timestamp,
+        ]);
+        $settings = config('services.microsoft');
+
+        $get = Closure::bind(static function () use ($directory, $sessionName, $cookie, $settings): array {
+            config(['services.microsoft' => $settings]);
+            app()->instance(MicrosoftOidc::class, new class($directory) extends MicrosoftOidc
+            {
+                public function __construct(private string $directory)
+                {
+                    parent::__construct(new Client);
+                }
+
+                public function allowsTenant(string $tenant): bool
+                {
+                    touch($this->directory.'/get-loaded');
+                    $deadline = microtime(true) + 10;
+                    while (! file_exists($this->directory.'/post-start')) {
+                        if (microtime(true) > $deadline) {
+                            throw new RuntimeException('Contact GET did not observe the concurrent POST.');
+                        }
+                        usleep(10000);
+                    }
+                    usleep(1200000);
+
+                    return true;
+                }
+            });
+
+            $request = Request::create('/auth/microsoft/contact', 'GET', [], [$sessionName => $cookie]);
+            $kernel = app(Kernel::class);
+            $response = $kernel->handle($request);
+            $kernel->terminate($request, $response);
+
+            return [$response->getStatusCode(), $response->headers->get('Location')];
+        }, null, null);
+
+        $post = Closure::bind(static function () use ($directory, $sessionName, $cookie, $settings, $newEmail): array {
+            config(['services.microsoft' => $settings]);
+            app()->instance(MicrosoftOidc::class, new MicrosoftOidc(new Client));
+            $deadline = microtime(true) + 10;
+            while (! file_exists($directory.'/get-loaded')) {
+                if (microtime(true) > $deadline) {
+                    throw new RuntimeException('Contact POST did not observe the loaded GET session.');
+                }
+                usleep(10000);
+            }
+            touch($directory.'/post-start');
+
+            $request = Request::create('/auth/microsoft/contact', 'POST', [
+                'name' => 'Concurrent Example', 'email' => $newEmail,
+            ], [$sessionName => $cookie]);
+            $kernel = app(Kernel::class);
+            $response = $kernel->handle($request);
+            $kernel->terminate($request, $response);
+
+            return [$response->getStatusCode(), parse_url($response->headers->get('Location', ''), PHP_URL_PATH)];
+        }, null, null);
+
+        $results = Concurrency::driver('process')->run([$get, $post], timeout: 20);
+        expect($results[0][0])->toBe(200)
+            ->and($results[1])->toBe([302, '/auth/microsoft/contact']);
+
+        $payload = DB::table('sessions')->where('id', $sessionId)->value('payload');
+        $saved = json_decode(base64_decode($payload, true), true, 512, JSON_THROW_ON_ERROR);
+        $pending = $saved['microsoft']['pending'];
+        expect($pending['contact']['email'])->toBe($newEmail)
+            ->and($pending['proof'])->not->toBe($oldProof);
+
+        $kernel = app(Kernel::class);
+        $oldRequest = Request::create($oldProofUrl, 'GET', [], [$sessionName => $cookie]);
+        $oldResponse = $kernel->handle($oldRequest);
+        $kernel->terminate($oldRequest, $oldResponse);
+        expect($oldResponse->getStatusCode())->toBe(302)
+            ->and(parse_url($oldResponse->headers->get('Location', ''), PHP_URL_PATH))->toBe('/login');
+
+        $currentProofUrl = URL::temporarySignedRoute(
+            'microsoft.contact.verify', now()->addMinutes(1), ['proof' => $pending['proof']],
+        );
+        $confirmRequest = Request::create($currentProofUrl, 'GET', [], [$sessionName => $cookie]);
+        $confirmResponse = $kernel->handle($confirmRequest);
+        $kernel->terminate($confirmRequest, $confirmResponse);
+        expect($confirmResponse->getStatusCode())->toBe(200)
+            ->and(User::where('email', $newEmail)->count())->toBe(0)
+            ->and(MicrosoftIdentity::where('tenant_id', MICROSOFT_TEST_TENANT)->where('object_id', MICROSOFT_TEST_OBJECT)->count())->toBe(0);
+
+        $completeRequest = Request::create($currentProofUrl, 'POST', [], [$sessionName => $cookie]);
+        $completeResponse = $kernel->handle($completeRequest);
+        $kernel->terminate($completeRequest, $completeResponse);
+        expect($completeResponse->getStatusCode())->toBe(302)
+            ->and(parse_url($completeResponse->headers->get('Location', ''), PHP_URL_PATH))->toBe('/dashboard')
+            ->and(User::where('email', $newEmail)->count())->toBe(1)
+            ->and(User::where('email', $oldEmail)->count())->toBe(0)
+            ->and(MicrosoftIdentity::where('tenant_id', MICROSOFT_TEST_TENANT)->where('object_id', MICROSOFT_TEST_OBJECT)->count())->toBe(1);
+    } finally {
+        DB::table('sessions')->whereIn('id', $ids)->delete();
+        User::whereIn('email', [$oldEmail, $newEmail])->delete();
+        foreach (glob($directory.'/*') as $file) {
+            unlink($file);
+        }
+        rmdir($directory);
+        DB::beginTransaction();
+    }
+});
 
 it('rejects a historical contact email collision regardless of case and guards database races', function () {
     $existing = User::factory()->create(['email' => 'existing@example.test']);
     DB::table('users')->where('id', $existing->id)->update(['email' => 'Existing@Example.Test']);
     [$callback] = beginMicrosoft($this);
     $this->get($callback)->assertRedirectToRoute('microsoft.contact');
-    $this->post(route('microsoft.contact.store'), ['name' => 'Alex', 'email' => 'existing@example.test'])->assertSessionHasErrors('email');
+    $this->post(route('microsoft.contact.store'), ['name' => 'Alex', 'email' => 'existing@example.test'])
+        ->assertRedirectToRoute('microsoft.contact')
+        ->assertSessionHas('status');
     expect(User::count())->toBe(1);
     expect(fn () => DB::transaction(fn () => User::factory()->create(['email' => 'EXISTING@example.test'])))->toThrow(UniqueConstraintViolationException::class);
     expect(MicrosoftIdentity::count())->toBe(0);

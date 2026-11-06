@@ -1,7 +1,6 @@
 import { Form, Head, usePage } from '@inertiajs/react';
 import { Link } from '@inertiajs/react';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
-import DeleteUser from '@/components/delete-user';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
@@ -17,9 +16,11 @@ type PageProps = {
 
 export default function Profile({
     mustVerifyEmail,
+    canChangeEmail,
     status,
 }: {
     mustVerifyEmail: boolean;
+    canChangeEmail: boolean;
     status?: string;
 }) {
     const { auth } = usePage<PageProps>().props;
@@ -34,7 +35,11 @@ export default function Profile({
                 <Heading
                     variant="small"
                     title="Profile"
-                    description="Update your name and email address"
+                    description={
+                        canChangeEmail
+                            ? 'Update your name and email address'
+                            : 'Update your name. Contact email changes are not available yet.'
+                    }
                 />
 
                 <Form
@@ -77,7 +82,22 @@ export default function Profile({
                                     required
                                     autoComplete="username"
                                     placeholder="Email address"
+                                    readOnly={!canChangeEmail}
+                                    aria-describedby={
+                                        canChangeEmail
+                                            ? undefined
+                                            : 'email-help'
+                                    }
                                 />
+
+                                {!canChangeEmail && (
+                                    <p
+                                        id="email-help"
+                                        className="text-sm text-muted-foreground"
+                                    >
+                                        Read-only for Microsoft-only accounts.
+                                    </p>
+                                )}
 
                                 <InputError
                                     className="mt-2"
@@ -103,8 +123,10 @@ export default function Profile({
                                         {status ===
                                             'verification-link-sent' && (
                                             <div className="mt-2 text-sm font-medium text-green-600">
-                                                A new verification link has been
-                                                sent to your email address.
+                                                A verification link has been
+                                                requested. Check your inbox
+                                                shortly, or try again if it does
+                                                not arrive.
                                             </div>
                                         )}
                                     </div>
@@ -122,8 +144,6 @@ export default function Profile({
                     )}
                 </Form>
             </div>
-
-            <DeleteUser />
         </>
     );
 }
