@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { edit } from '@/routes/profile';
+import { show } from '@/routes/members';
 import type { Auth } from '@/types';
 import { send } from '@/routes/verification';
 
@@ -35,6 +36,13 @@ export default function Profile({
                     title="Profile"
                     description="Update your name and email address"
                 />
+
+                <Link
+                    href={show(auth.user.id)}
+                    className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                >
+                    View profile
+                </Link>
 
                 <Form
                     {...ProfileController.update.form()}
