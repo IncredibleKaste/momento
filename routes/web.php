@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FollowController;
 use App\Http\Controllers\MemberController;
 use Illuminate\Http\Request;
@@ -10,7 +11,7 @@ use Symfony\Component\HttpFoundation\Response;
 Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::inertia('dashboard', 'dashboard')->name('dashboard');
+    Route::get('dashboard', DashboardController::class)->name('dashboard');
     Route::get('following', [FollowController::class, 'index'])->name('following.index');
     Route::get('members/{member}', [MemberController::class, 'show'])->whereNumber('member')->name('members.show');
     Route::post('members/{member}/follow-requests', [FollowController::class, 'store'])
