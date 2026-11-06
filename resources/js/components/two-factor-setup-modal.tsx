@@ -54,12 +54,14 @@ function TwoFactorSetupStep({
     manualSetupKey,
     buttonText,
     onNextStep,
+    onRetry,
     errors,
 }: {
     qrCodeSvg: string | null;
     manualSetupKey: string | null;
     buttonText: string;
     onNextStep: () => void;
+    onRetry: () => Promise<void>;
     errors: string[];
 }) {
     const { resolvedAppearance } = useAppearance();
@@ -69,7 +71,10 @@ function TwoFactorSetupStep({
     return (
         <>
             {errors?.length ? (
-                <AlertError errors={errors} />
+                <div className="space-y-3">
+                    <AlertError errors={errors} />
+                    <Button onClick={onRetry}>Retry setup</Button>
+                </div>
             ) : (
                 <>
                     <div className="mx-auto flex max-w-md overflow-hidden">
@@ -77,6 +82,8 @@ function TwoFactorSetupStep({
                             <div className="z-10 flex h-full w-full items-center justify-center p-5">
                                 {qrCodeSvg ? (
                                     <div
+                                        role="img"
+                                        aria-label="Authenticator setup QR code"
                                         className="aspect-square w-full rounded-lg bg-white p-2 [&_svg]:size-full"
                                         dangerouslySetInnerHTML={{
                                             __html: qrCodeSvg,
@@ -96,7 +103,11 @@ function TwoFactorSetupStep({
                     </div>
 
                     <div className="flex w-full space-x-5">
-                        <Button className="w-full" onClick={onNextStep}>
+                        <Button
+                            className="w-full"
+                            onClick={onNextStep}
+                            disabled={!qrCodeSvg || !manualSetupKey}
+                        >
                             {buttonText}
                         </Button>
                     </div>
@@ -118,12 +129,18 @@ function TwoFactorSetupStep({
                                 <>
                                     <input
                                         type="text"
+                                        aria-label="Authenticator setup key"
                                         readOnly
                                         value={manualSetupKey}
                                         className="h-full w-full bg-background p-3 text-foreground outline-none"
                                     />
                                     <button
                                         onClick={() => copy(manualSetupKey)}
+                                        aria-label={
+                                            copiedText === manualSetupKey
+                                                ? 'Setup key copied'
+                                                : 'Copy setup key'
+                                        }
                                         className="border-l border-border px-3 hover:bg-muted"
                                     >
                                         <IconComponent className="w-4" />
@@ -176,6 +193,7 @@ function TwoFactorVerificationStep({
                         <div className="flex w-full flex-col items-center space-y-3 py-2">
                             <InputOTP
                                 id="otp"
+                                aria-label="Six-digit authentication code"
                                 name="code"
                                 maxLength={OTP_MAX_LENGTH}
                                 onChange={setCode}
@@ -273,7 +291,7 @@ export default function TwoFactorSetupModal({
             return {
                 title: 'Verify authentication code',
                 description:
-                    'Enter the 6-digit code from your authenticator app',
+                    'Enter the six-digit code from your authenticator app. If it fails, wait for a new code and check that your device uses automatic time.',
                 buttonText: 'Continue',
             };
         }
@@ -345,6 +363,7 @@ export default function TwoFactorSetupModal({
                             manualSetupKey={manualSetupKey}
                             buttonText={modalConfig.buttonText}
                             onNextStep={handleModalNextStep}
+                            onRetry={fetchSetupData}
                             errors={errors}
                         />
                     )}
