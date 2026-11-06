@@ -6,7 +6,7 @@ use App\Models\Follow;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response;
 
 class MemberController extends Controller
 {
@@ -16,9 +16,12 @@ class MemberController extends Controller
         $follow = Follow::query()->where('follower_id', $request->user()->id)
             ->where('followed_id', $member->id)->first();
 
-        return Inertia::render('members/show', [
+        $response = Inertia::render('members/show', [
             'member' => ['id' => $member->id, 'name' => $member->name],
             'follow' => $follow ? ['id' => $follow->id, 'status' => $follow->status] : null,
-        ]);
+        ])->toResponse($request);
+        $response->headers->set('Cache-Control', 'private, no-store');
+
+        return $response;
     }
 }

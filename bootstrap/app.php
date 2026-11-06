@@ -11,7 +11,9 @@ use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
+use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Webauthn\Exception\WebauthnException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -37,6 +39,19 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->map(WebauthnException::class, fn (WebauthnException $exception) => ValidationException::withMessages([
             'credential' => __('Unable to verify this passkey. Please try again or use your password.'),
         ]));
+
+        $exceptions->render(function (NotFoundHttpException $exception, Request $request): ?Response {
+            if (! $request->routeIs('members.show') || $request->expectsJson()) {
+                return null;
+            }
+
+            $response = Inertia::render('not-found', [
+                'auth' => ['user' => $request->user()?->only('id', 'name')],
+            ])->toResponse($request)->setStatusCode(404);
+            $response->headers->set('Cache-Control', 'private, no-store');
+
+            return $response;
+        });
 
         $exceptions->render(function (Throwable $exception, Request $request): ?Response {
             if (! $exception instanceof PDOException && ! is_a($exception, 'RedisException')) {
