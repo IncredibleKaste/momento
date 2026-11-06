@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Actions\Fortify\TwoFactorAuthenticationProvider;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
@@ -14,6 +15,7 @@ use App\Http\Responses\RegisterResponse;
 use App\Models\User;
 use App\Services\MicrosoftOidc;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -26,6 +28,7 @@ use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
 use Laravel\Passkeys\Contracts\PasskeyUser;
 use Laravel\Passkeys\Passkeys;
+use PragmaRX\Google2FA\Google2FA;
 
 class FortifyServiceProvider extends ServiceProvider
 {
@@ -34,6 +37,9 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->singleton(\Laravel\Fortify\Contracts\TwoFactorAuthenticationProvider::class, fn ($app) => new TwoFactorAuthenticationProvider(
+            $app->make(Google2FA::class), $app->make(Repository::class),
+        ));
         $this->app->bind(SuccessfulPasswordResetLinkRequestResponse::class, PasswordResetLinkResponse::class);
         $this->app->bind(FailedPasswordResetLinkRequestResponse::class, PasswordResetLinkResponse::class);
         $this->app->bind(\Laravel\Fortify\Contracts\FailedPasswordResetResponse::class, FailedPasswordResetResponse::class);
@@ -104,6 +110,12 @@ class FortifyServiceProvider extends ServiceProvider
      */
     private function configureRateLimiting(): void
     {
+        RateLimiter::for('two-factor-management', function (Request $request) {
+            return $request->routeIs('two-factor.*') && ! $request->routeIs('two-factor.login*') && ! $request->isMethod('GET')
+                ? Limit::perMinute(5)->by($request->user()?->getAuthIdentifier().'|'.$request->ip())
+                : Limit::none();
+        });
+
         RateLimiter::for('auth-requests', function (Request $request) {
             return $request->isMethod('POST') && $request->routeIs('register.store', 'password.email', 'password.update')
                 ? Limit::perMinute(5)->by($request->route()->getName().'|'.$request->ip())
@@ -122,9 +134,10 @@ class FortifyServiceProvider extends ServiceProvider
         });
 
         RateLimiter::for('passkeys', function (Request $request) {
-            return Limit::perMinute(10)->by(
-                ($request->input('credential.id') ?: $request->session()->getId()).'|'.$request->ip(),
-            );
+            return [
+                Limit::perMinute(10)->by('session|'.$request->session()->getId().'|'.$request->ip()),
+                Limit::perMinute(60)->by('ip|'.$request->ip()),
+            ];
         });
     }
 }

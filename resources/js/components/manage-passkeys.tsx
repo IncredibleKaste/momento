@@ -28,10 +28,10 @@ const EmptyState = () => {
 export default function ManagePasskeys(props: Props) {
     const passkeys = props.passkeys ?? [];
 
-    const handleDelete = (id: number, onError: () => void) => {
+    const handleDelete = (id: number, onFinish: () => void) => {
         router.delete(destroy.url(id), {
             preserveScroll: true,
-            onError,
+            onFinish,
         });
     };
 
@@ -50,6 +50,13 @@ export default function ManagePasskeys(props: Props) {
                 title="Passkeys"
                 description="Manage your passkeys for passwordless sign-in"
             />
+
+            <p className="text-sm text-muted-foreground">
+                A passkey uses your device’s identity check to sign in. If your
+                device is unavailable, use your password and any enrolled
+                authenticator code or unused recovery code. Removing your last
+                passkey keeps that password sign-in available.
+            </p>
 
             <div className="overflow-hidden rounded-lg border border-border">
                 {passkeys.length > 0 ? (

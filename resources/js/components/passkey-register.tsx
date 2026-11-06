@@ -1,5 +1,5 @@
 import { usePasskeyRegister } from '@laravel/passkeys/react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,27 +10,9 @@ type Props = {
 };
 
 export default function PasskeyRegistration({ onSuccess }: Props) {
-    const [name, setName] = useState(() => {
-        const ua = navigator.userAgent;
-
-        const browser = [
-            { pattern: /Edg|Edge/, name: 'Edge' },
-            { pattern: /OPR|Opera|OPiOS/, name: 'Opera' },
-            { pattern: /Firefox|FxiOS/, name: 'Firefox' },
-            { pattern: /Chrome|CriOS/, name: 'Chrome' },
-            { pattern: /Safari/, name: 'Safari' },
-        ].find(({ pattern }) => pattern.test(ua))?.name;
-
-        const os = [
-            { pattern: /iPhone/, name: 'iPhone' },
-            { pattern: /iPad|Macintosh(?=.*Mobile)/, name: 'iPad' },
-            { pattern: /Android/, name: 'Android' },
-            { pattern: /Mac/, name: 'Mac' },
-            { pattern: /Windows/, name: 'Windows' },
-        ].find(({ pattern }) => pattern.test(ua))?.name;
-
-        return [browser, os].filter(Boolean).join(' on ') || '';
-    });
+    const addButtonRef = useRef<HTMLButtonElement>(null);
+    const registerButtonRef = useRef<HTMLButtonElement>(null);
+    const [name, setName] = useState('');
 
     const [showForm, setShowForm] = useState(false);
     const { register, isLoading, error, isSupported } = usePasskeyRegister({
@@ -38,6 +20,9 @@ export default function PasskeyRegistration({ onSuccess }: Props) {
             setName('');
             setShowForm(false);
             onSuccess();
+        },
+        onError: () => {
+            requestAnimationFrame(() => registerButtonRef.current?.focus());
         },
     });
 
@@ -48,25 +33,31 @@ export default function PasskeyRegistration({ onSuccess }: Props) {
             return;
         }
 
-        await register(name);
+        await register(name.trim());
     };
 
     const handleCancel = () => {
         setShowForm(false);
         setName('');
+        requestAnimationFrame(() => addButtonRef.current?.focus());
     };
 
     if (!isSupported) {
         return (
             <div className="text-sm text-muted-foreground">
-                Passkeys are not supported in this browser.
+                Passkeys are not supported in this browser. Use your password
+                and any enrolled authenticator code instead.
             </div>
         );
     }
 
     if (!showForm) {
         return (
-            <Button variant="outline" onClick={() => setShowForm(true)}>
+            <Button
+                ref={addButtonRef}
+                variant="outline"
+                onClick={() => setShowForm(true)}
+            >
                 Add passkey
             </Button>
         );
@@ -82,6 +73,9 @@ export default function PasskeyRegistration({ onSuccess }: Props) {
                 <Input
                     id="passkey-name"
                     type="text"
+                    maxLength={255}
+                    required
+                    disabled={isLoading}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="e.g., MacBook Pro, iPhone"
@@ -89,17 +83,35 @@ export default function PasskeyRegistration({ onSuccess }: Props) {
                     autoFocus
                 />
                 <p className="text-xs text-muted-foreground">
-                    A name helps you identify this passkey later.
+                    Choose a name you recognize. Your device will ask you to
+                    verify your identity; the passkey is added only when the
+                    browser finishes successfully.
                 </p>
             </div>
 
             {error && <InputError message={error} />}
+            {error && (
+                <p className="text-sm text-muted-foreground">
+                    If you cancelled or the request timed out, try Register
+                    passkey again. Reload Security settings if you need to
+                    confirm your password.
+                </p>
+            )}
 
             <div className="flex gap-2">
-                <Button type="submit" disabled={isLoading || !name.trim()}>
+                <Button
+                    ref={registerButtonRef}
+                    type="submit"
+                    disabled={isLoading || !name.trim()}
+                >
                     {isLoading ? 'Registering...' : 'Register passkey'}
                 </Button>
-                <Button type="button" variant="ghost" onClick={handleCancel}>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleCancel}
+                    disabled={isLoading}
+                >
                     Cancel
                 </Button>
             </div>
