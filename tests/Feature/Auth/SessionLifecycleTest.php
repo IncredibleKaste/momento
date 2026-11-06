@@ -3,6 +3,7 @@
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Password;
+use Inertia\Testing\AssertableInertia as Assert;
 
 function resetSessionTestClient(): void
 {
@@ -16,10 +17,11 @@ beforeEach(function () {
     app('session')->forgetDrivers();
 });
 
-test('login rotates a database session and logout prevents replay of the old authenticated cookie', function () {
+test('logout rotates the database session and expires encrypted Inertia history', function () {
     $user = User::factory()->create();
     $cookie = config('session.cookie');
-    $guest = $this->get(route('login'))->getCookie($cookie)->getValue();
+    $loginPage = $this->get(route('login'))->assertInertia(fn (Assert $page) => expect($page->toArray())->toHaveKey('encryptHistory', true));
+    $guest = $loginPage->getCookie($cookie)->getValue();
     resetSessionTestClient();
 
     $login = $this->withCookie($cookie, $guest)->post(route('login.store'), [
@@ -30,10 +32,19 @@ test('login rotates a database session and logout prevents replay of the old aut
     $this->assertDatabaseMissing('sessions', ['id' => $guest]);
     resetSessionTestClient();
 
-    $this->withCookie($cookie, $authenticated)->get(route('dashboard'))->assertOk();
+    $this->withCookie($cookie, $authenticated)->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => expect($page->toArray())->toHaveKey('encryptHistory', true));
     resetSessionTestClient();
-    $this->withCookie($cookie, $authenticated)->post(route('logout'))->assertRedirect(route('home'));
+    $logout = $this->withCookie($cookie, $authenticated)->post(route('logout'))->assertRedirect(route('home'));
     $this->assertDatabaseMissing('sessions', ['id' => $authenticated]);
+    $logoutCookie = $logout->getCookie($cookie)->getValue();
+    resetSessionTestClient();
+
+    $this->withCookie($cookie, $logoutCookie)->get(route('home'))
+        ->assertInertia(fn (Assert $page) => expect($page->toArray())->toMatchArray([
+            'clearHistory' => true,
+            'encryptHistory' => true,
+        ]));
     resetSessionTestClient();
 
     $this->withCookie($cookie, $authenticated)->get(route('dashboard'))->assertRedirect(route('login'));
