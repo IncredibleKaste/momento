@@ -26,13 +26,13 @@ class EnsureAccountIsActive
                 Auth::logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
+                Inertia::clearHistory();
 
                 if ($request->expectsJson()) {
                     abort(403);
                 }
 
                 Inertia::share('auth.user', null);
-                Inertia::clearHistory();
 
                 $response = Inertia::render('access-denied')
                     ->toResponse($request)

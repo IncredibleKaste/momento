@@ -14,6 +14,7 @@ use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Cookie\CookieValuePrefix;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Concurrency;
 use Illuminate\Support\Facades\Exceptions;
@@ -378,12 +379,55 @@ it('revokes existing provider sessions after disablement or tenant removal', fun
 })->with(['tenant', 'account', 'identity']);
 
 it('keeps forced signout JSON denials as JSON 403 responses', function () {
-    $user = User::factory()->create(['disabled_at' => now()]);
-    $this->actingAs($user)
+    config(['session.driver' => 'database']);
+    app('session')->forgetDrivers();
+    $user = User::factory()->create();
+    $cookie = config('session.cookie');
+    $guestCookie = $this->withoutVite()->get(route('login'))->getCookie($cookie)->getValue();
+
+    Auth::forgetGuards();
+    app()->forgetInstance('session.store');
+    app('session')->forgetDrivers();
+
+    $login = $this->withCookie($cookie, $guestCookie)->post(route('login.store'), [
+        'email' => $user->email,
+        'password' => 'password',
+    ])->assertRedirect(route('dashboard', absolute: false));
+    $authenticatedCookie = $login->getCookie($cookie)->getValue();
+    $user->forceFill(['disabled_at' => now()])->save();
+
+    Auth::forgetGuards();
+    app()->forgetInstance('session.store');
+    app('session')->forgetDrivers();
+
+    $denial = $this->withCookie($cookie, $authenticatedCookie)
         ->withHeader('Accept', 'application/json')
         ->get(route('dashboard'))
         ->assertForbidden()
         ->assertJsonMissingPath('component');
+
+    $revokedCookie = $denial->getCookie($cookie)->getValue();
+    expect($revokedCookie)->not->toBe($authenticatedCookie);
+    $this->assertDatabaseMissing('sessions', ['id' => $authenticatedCookie]);
+    $this->assertDatabaseHas('sessions', ['id' => $revokedCookie, 'user_id' => null]);
+
+    Auth::forgetGuards();
+    app()->forgetInstance('session.store');
+    app('session')->forgetDrivers();
+
+    $this->withoutVite()
+        ->withCookie($cookie, $revokedCookie)
+        ->withHeader('Accept', 'text/html, application/xhtml+xml')
+        ->get(route('home'))
+        ->assertInertia(function (Assert $page): void {
+            expect($page->toArray())->toMatchArray([
+                'component' => 'welcome',
+                'clearHistory' => true,
+                'encryptHistory' => true,
+            ]);
+
+            $page->where('auth.user', null);
+        });
 
     $this->assertGuest();
 });
