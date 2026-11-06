@@ -87,7 +87,7 @@ jobs:
           MOMENTO_PASSKEY_CONCURRENCY: '1'
         run: php artisan test --compact tests/Feature/Auth/PasskeyAuthenticationTest.php
 
-      - name: Check follow lifecycle with PostgreSQL and Redis
+      - name: Check follows and profiles with PostgreSQL and Redis
         env:
           APP_ENV: testing
           DB_CONNECTION: pgsql
@@ -99,7 +99,7 @@ jobs:
           CACHE_STORE: redis
           CACHE_PREFIX: follow-test-${{ github.run_id }}-${{ github.run_attempt }}-
           MOMENTO_FOLLOW_CONCURRENCY: '1'
-        run: php artisan test --compact tests/Feature/FollowTest.php tests/Feature/FollowConcurrencyTest.php
+        run: php artisan test --compact tests/Feature/FollowTest.php tests/Feature/FollowConcurrencyTest.php tests/Feature/MemberProfileTest.php
 
       - name: Check two-factor concurrency with PostgreSQL and Redis
         env:

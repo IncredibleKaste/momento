@@ -30,7 +30,6 @@ export function NavMain({ items }: { items: NavItem[] }) {
                                     isCurrentUrl(item.href) ? 'page' : undefined
                                 }
                                 onClick={() => setOpenMobile(false)}
-                                prefetch
                             >
                                 <span className="flex size-8 shrink-0 items-center justify-center">
                                     {item.icon && <item.icon />}
