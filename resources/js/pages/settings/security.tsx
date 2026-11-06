@@ -128,6 +128,7 @@ export default function Security(props: Props) {
                 canManageTwoFactor={props.canManageTwoFactor}
                 requiresConfirmation={props.requiresConfirmation}
                 twoFactorEnabled={props.twoFactorEnabled}
+                twoFactorPending={props.twoFactorPending}
             />
 
             <ManagePasskeys

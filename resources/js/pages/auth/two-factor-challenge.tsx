@@ -2,14 +2,17 @@ import { Form, Head, setLayoutProps } from '@inertiajs/react';
 import { REGEXP_ONLY_DIGITS } from 'input-otp';
 import { useMemo, useState } from 'react';
 import InputError from '@/components/input-error';
+import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
     InputOTP,
     InputOTPGroup,
     InputOTPSlot,
 } from '@/components/ui/input-otp';
 import { OTP_MAX_LENGTH } from '@/hooks/use-two-factor-auth';
+import { login } from '@/routes';
 import { store } from '@/routes/two-factor/login';
 
 export default function TwoFactorChallenge() {
@@ -64,7 +67,11 @@ export default function TwoFactorChallenge() {
                         <>
                             {showRecoveryInput ? (
                                 <>
+                                    <Label htmlFor="recovery_code">
+                                        Unused recovery code
+                                    </Label>
                                     <Input
+                                        id="recovery_code"
                                         name="recovery_code"
                                         type="text"
                                         placeholder="Enter recovery code"
@@ -79,6 +86,7 @@ export default function TwoFactorChallenge() {
                                 <div className="flex flex-col items-center justify-center space-y-3 text-center">
                                     <div className="flex w-full items-center justify-center">
                                         <InputOTP
+                                            aria-label="Six-digit authentication code"
                                             name="code"
                                             maxLength={OTP_MAX_LENGTH}
                                             value={code}
@@ -127,6 +135,15 @@ export default function TwoFactorChallenge() {
                         </>
                     )}
                 </Form>
+                <p className="text-sm text-muted-foreground">
+                    If a code fails, wait for the next code and check your
+                    device’s automatic time setting. You can use an unused
+                    recovery code or return to sign in with an enrolled passkey.
+                    Password reset does not remove two-factor authentication. If
+                    all enrolled methods and recovery codes are lost, automated
+                    recovery is unavailable.
+                </p>
+                <TextLink href={login()}>Back to sign in</TextLink>
             </div>
         </>
     );
