@@ -8,7 +8,9 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
+use stdClass;
 use Symfony\Component\HttpFoundation\Response;
 
 class FollowController extends Controller
@@ -53,17 +55,30 @@ class FollowController extends Controller
     /** @return LengthAwarePaginator<int, array{id: int, status: string, member: array{id: int, name: string}}> */
     private function relationships(User $viewer, bool $incoming, string $status, string $page): LengthAwarePaginator
     {
-        return Follow::query()
-            ->where($incoming ? 'followed_id' : 'follower_id', $viewer->id)
-            ->where('status', $status)
-            ->with($incoming ? 'follower:id,name' : 'followed:id,name')
-            ->orderByDesc('id')
-            ->paginate(12, ['id', 'follower_id', 'followed_id', 'status'], $page)
-            ->withQueryString()
-            ->through(function (Follow $follow) use ($incoming): array {
-                $member = $incoming ? $follow->follower : $follow->followed;
+        $memberKey = $incoming ? 'follows.follower_id' : 'follows.followed_id';
+        $ownerKey = $incoming ? 'follows.followed_id' : 'follows.follower_id';
 
-                return ['id' => $follow->id, 'status' => $follow->status, 'member' => ['id' => $member->id, 'name' => $member->name]];
+        return DB::table('follows')
+            ->join('users as members', 'members.id', '=', $memberKey)
+            ->where($ownerKey, $viewer->id)
+            ->where('follows.status', $status)
+            ->orderByDesc('follows.id')
+            ->paginate(12, [
+                'follows.id as relationship_id',
+                'follows.status as relationship_status',
+                'members.id as member_id',
+                'members.name as member_name',
+            ], $page)
+            ->withQueryString()
+            ->through(function (stdClass $relationship): array {
+                return [
+                    'id' => (int) $relationship->relationship_id,
+                    'status' => (string) $relationship->relationship_status,
+                    'member' => [
+                        'id' => (int) $relationship->member_id,
+                        'name' => (string) $relationship->member_name,
+                    ],
+                ];
             });
     }
 }

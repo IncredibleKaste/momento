@@ -151,6 +151,49 @@ it('projects only related member names and route identity with bounded paginatio
     expect(app(PhotoAccess::class)->allows($viewer, $unrelated->followed))->toBeFalse();
 });
 
+it('paginates only the current member’s approved outgoing follows', function () {
+    $viewer = User::factory()->create();
+    $targets = User::factory()->count(13)->create();
+    $follows = $targets->map(fn (User $target): Follow => Follow::factory()->approved()->create([
+        'follower_id' => $viewer->id,
+        'followed_id' => $target->id,
+    ]));
+    Follow::factory()->create(['follower_id' => $viewer->id]);
+    Follow::factory()->approved()->create(['followed_id' => $viewer->id]);
+    Follow::factory()->approved()->create();
+
+    $this->actingAs($viewer)->get(route('following.index', ['followingPage' => 1]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('following.data', 12)
+            ->where('following.total', 13)
+            ->where('following.data.0.id', $follows->last()->id)
+            ->where('following.data.0.member.id', $targets->last()->id)
+            ->has('following.next_page_url')
+            ->missing('following.data.0.member.email'));
+
+    $this->get(route('following.index', ['followingPage' => 2]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('following.data', 1)
+            ->where('following.total', 13)
+            ->where('following.data.0.id', $follows->first()->id));
+
+    $otherMember = User::factory()->create();
+    $this->actingAs($otherMember)->get(route('following.index'))
+        ->assertInertia(fn (Assert $page) => $page->where('following.total', 0));
+});
+
+it('omits a followed member after that member is deleted', function () {
+    $follow = Follow::factory()->approved()->create();
+    $followed = $follow->followed;
+    $followed->delete();
+
+    $this->actingAs($follow->follower)->get(route('following.index'))
+        ->assertHeader('Cache-Control', 'no-store, private')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('following.total', 0)
+            ->has('following.data', 0));
+});
+
 it('does not cache an approval in a reused access service or loaded user relation', function () {
     $follow = Follow::factory()->approved()->create();
     $access = app(PhotoAccess::class);
