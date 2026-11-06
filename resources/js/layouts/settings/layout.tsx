@@ -44,24 +44,34 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                         className="flex flex-col space-y-1 space-x-0"
                         aria-label="Settings"
                     >
-                        {sidebarNavItems.map((item, index) => (
-                            <Button
-                                key={`${toUrl(item.href)}-${index}`}
-                                size="sm"
-                                variant="ghost"
-                                asChild
-                                className={cn('w-full justify-start', {
-                                    'bg-muted': isCurrentOrParentUrl(item.href),
-                                })}
-                            >
-                                <Link href={item.href}>
-                                    {item.icon && (
-                                        <item.icon className="h-4 w-4" />
+                        {sidebarNavItems.map((item, index) => {
+                            const isCurrent = isCurrentOrParentUrl(item.href);
+
+                            return (
+                                <Button
+                                    key={`${toUrl(item.href)}-${index}`}
+                                    size="sm"
+                                    variant="ghost"
+                                    asChild
+                                    className={cn(
+                                        'min-h-11 w-full justify-start',
+                                        { 'bg-muted': isCurrent },
                                     )}
-                                    {item.title}
-                                </Link>
-                            </Button>
-                        ))}
+                                >
+                                    <Link
+                                        href={item.href}
+                                        aria-current={
+                                            isCurrent ? 'page' : undefined
+                                        }
+                                    >
+                                        {item.icon && (
+                                            <item.icon className="h-4 w-4" />
+                                        )}
+                                        {item.title}
+                                    </Link>
+                                </Button>
+                            );
+                        })}
                     </nav>
                 </aside>
 
