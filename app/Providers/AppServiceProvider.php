@@ -41,6 +41,8 @@ class AppServiceProvider extends ServiceProvider
         });
         RateLimiter::for('follow-actions', fn (Request $request): Limit => Limit::perMinute(60)
             ->by('follow-actions:'.$request->user()->getAuthIdentifier())->response($this->followLimitResponse(...)));
+        RateLimiter::for('people-search', fn (Request $request): Limit => Limit::perMinute(60)
+            ->by('people-search:'.$request->user()->getAuthIdentifier()));
     }
 
     /** @param array<string, int|string> $headers */

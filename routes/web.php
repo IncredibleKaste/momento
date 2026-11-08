@@ -3,6 +3,7 @@
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FollowController;
 use App\Http\Controllers\MemberController;
+use App\Http\Controllers\PeopleSearchController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -12,6 +13,7 @@ Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+    Route::get('people', PeopleSearchController::class)->middleware('throttle:people-search')->name('people.index');
     Route::get('following', [FollowController::class, 'index'])->name('following.index');
     Route::get('members/{member}', [MemberController::class, 'show'])->whereNumber('member')->name('members.show');
     Route::post('members/{member}/follow-requests', [FollowController::class, 'store'])
