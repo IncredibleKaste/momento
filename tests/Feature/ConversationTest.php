@@ -186,15 +186,17 @@ it('paginates message history in stable descending cursors with a bounded page',
     [$alice, $bob] = mutuallyFollowedPair();
     $this->actingAs($alice)->post(route('messages.store', $bob));
     $conversation = Conversation::sole();
+    $messageIds = [];
     foreach (range(1, 51) as $number) {
-        ConversationMessage::create(['conversation_id' => $conversation->id, 'sender_id' => $alice->id, 'body' => "Message {$number}", 'client_nonce' => Str::uuid()->toString()]);
+        $messageIds[] = ConversationMessage::create(['conversation_id' => $conversation->id, 'sender_id' => $alice->id, 'body' => "Message {$number}", 'client_nonce' => Str::uuid()->toString()])->id;
     }
+    $olderPageCursor = $messageIds[1];
 
     $this->actingAs($bob)->get(route('messages.show', $conversation))->assertInertia(fn (Assert $page) => $page
         ->has('thread.messages', 50)->where('thread.messages.0.body', 'Message 2')
-        ->where('thread.messages.49.body', 'Message 51')->where('thread.nextBefore', 2)
+        ->where('thread.messages.49.body', 'Message 51')->where('thread.nextBefore', $olderPageCursor)
         ->where('thread.isLatestPage', true));
-    $this->get(route('messages.show', $conversation).'?before=2')->assertInertia(fn (Assert $page) => $page
+    $this->get(route('messages.show', $conversation).'?before='.$olderPageCursor)->assertInertia(fn (Assert $page) => $page
         ->has('thread.messages', 1)->where('thread.messages.0.body', 'Message 1')->where('thread.nextBefore', null)
         ->where('thread.isLatestPage', false));
 });
