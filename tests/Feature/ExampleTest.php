@@ -1,7 +1,18 @@
 <?php
 
-test('returns a successful response', function () {
-    $response = $this->get(route('home'));
+use App\Models\User;
+use Inertia\Testing\AssertableInertia as Assert;
 
-    $response->assertOk();
+test('serves the public welcome entry to guests and members without photo props', function () {
+    $this->get(route('home'))->assertInertia(fn (Assert $page) => $page
+        ->component('welcome')
+        ->where('auth.user', null)
+        ->missing('photos'));
+
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->get(route('home'))->assertInertia(fn (Assert $page) => $page
+        ->component('welcome')
+        ->where('auth.user.id', $user->id)
+        ->missing('photos'));
 });
