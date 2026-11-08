@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { House, UserRound, UsersRound, X } from 'lucide-react';
+import { House, Search, UserRound, UsersRound, X } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -16,6 +16,7 @@ import {
 import { dashboard } from '@/routes';
 import { index as following } from '@/routes/following';
 import { show as profile } from '@/routes/members';
+import { index as people } from '@/routes/people';
 import type { NavItem } from '@/types';
 
 export function AppSidebar() {
@@ -25,6 +26,7 @@ export function AppSidebar() {
         { title: 'Home', href: dashboard(), icon: House },
         { title: 'Profile', href: profile(auth.user.id), icon: UserRound },
         { title: 'Following', href: following(), icon: UsersRound },
+        { title: 'Find people', href: people(), icon: Search },
     ];
 
     return (

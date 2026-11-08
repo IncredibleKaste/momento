@@ -99,7 +99,7 @@ jobs:
           CACHE_STORE: redis
           CACHE_PREFIX: follow-test-${{ github.run_id }}-${{ github.run_attempt }}-
           MOMENTO_FOLLOW_CONCURRENCY: '1'
-        run: php artisan test --compact tests/Feature/FollowTest.php tests/Feature/FollowConcurrencyTest.php tests/Feature/MemberProfileTest.php tests/Feature/DashboardFollowedStripTest.php
+        run: php artisan test --compact tests/Feature/FollowTest.php tests/Feature/FollowConcurrencyTest.php tests/Feature/MemberProfileTest.php tests/Feature/DashboardFollowedStripTest.php tests/Feature/PeopleSearchTest.php
 
       - name: Check two-factor concurrency with PostgreSQL and Redis
         env:
