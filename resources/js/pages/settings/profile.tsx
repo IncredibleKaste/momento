@@ -34,7 +34,7 @@ export default function Profile({
                 <Heading
                     variant="small"
                     title="Profile"
-                    description="Update your name and email address"
+                    description="Update your name and view your account email"
                 />
 
                 <Link
@@ -86,22 +86,13 @@ export default function Profile({
                                     type="email"
                                     className="mt-1 block w-full"
                                     defaultValue={auth.user.email}
-                                    name="email"
-                                    required
-                                    autoComplete="username"
-                                    placeholder="Email address"
-                                    aria-invalid={Boolean(errors.email)}
-                                    aria-describedby={
-                                        errors.email ? 'email-error' : undefined
-                                    }
+                                    readOnly
+                                    aria-readonly="true"
                                 />
-
-                                <InputError
-                                    id="email-error"
-                                    className="mt-2"
-                                    message={errors.email}
-                                    role="alert"
-                                />
+                                <p className="text-sm text-muted-foreground">
+                                    Email address changes are not available
+                                    here.
+                                </p>
                             </div>
 
                             {mustVerifyEmail &&
