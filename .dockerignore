@@ -27,6 +27,10 @@
 !docker/
 !docker/Caddyfile
 !docker/php.ini
+!docker/patch-php-parser-download.php
+!tests/
+!tests/Runtime/
+!tests/Runtime/PhpParserDownloadPatchProbe.php
 public/build
 public/hot
 public/storage
