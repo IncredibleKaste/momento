@@ -14,14 +14,13 @@ test('profile page is displayed', function () {
     $response->assertOk();
 });
 
-test('profile information can be updated', function () {
-    $user = User::factory()->create();
+test('profile name can be updated without changing the account email', function () {
+    $user = User::factory()->create(['email' => 'test@example.com']);
 
     $response = $this
         ->actingAs($user)
         ->patch(route('profile.update'), [
             'name' => 'Test User',
-            'email' => 'test@example.com',
         ]);
 
     $response
@@ -32,7 +31,7 @@ test('profile information can be updated', function () {
 
     expect($user->name)->toBe('Test User');
     expect($user->email)->toBe('test@example.com');
-    expect($user->email_verified_at)->toBeNull();
+    expect($user->email_verified_at)->not->toBeNull();
 });
 
 test('profile updates ignore supplied account and security attributes', function () {
@@ -46,7 +45,6 @@ test('profile updates ignore supplied account and security attributes', function
 
     $response = $this->actingAs($owner)->patch(route('profile.update'), [
         'name' => 'Updated public name',
-        'email' => $owner->email,
         'user_id' => $other->id,
         'email_verified_at' => now()->subDay()->toDateTimeString(),
         'password' => 'attacker-supplied-password',
@@ -81,7 +79,6 @@ test('updated public name reaches the member and approved-follower projections',
 
     $this->actingAs($owner)->patch(route('profile.update'), [
         'name' => 'Updated public name',
-        'email' => $owner->email,
     ])->assertRedirectToRoute('profile.edit')
         ->assertSessionHasNoErrors()
         ->assertInertiaFlash('toast.message', 'Profile updated.');
@@ -110,7 +107,6 @@ test('invalid profile names preserve the saved name and do not flash success', f
         ->from(route('profile.edit'))
         ->patch(route('profile.update'), [
             'name' => $name,
-            'email' => $owner->email,
             'user_id' => $other->id,
         ]);
 
@@ -125,14 +121,13 @@ test('invalid profile names preserve the saved name and do not flash success', f
     'name exceeds the accepted limit' => [str_repeat('x', 256), 'The name field must not be greater than 255 characters.'],
 ]);
 
-test('email verification status is unchanged when the email address is unchanged', function () {
+test('profile name updates preserve email verification status', function () {
     $user = User::factory()->create();
 
     $response = $this
         ->actingAs($user)
         ->patch(route('profile.update'), [
             'name' => 'Test User',
-            'email' => $user->email,
         ]);
 
     $response
@@ -141,6 +136,31 @@ test('email verification status is unchanged when the email address is unchanged
 
     expect($user->refresh()->email_verified_at)->not->toBeNull();
 });
+
+test('profile update rejects any supplied email and preserves the saved account details', function (?string $email) {
+    $user = User::factory()->create(['name' => 'Original name']);
+    $originalEmail = $user->email;
+    $verifiedAt = $user->email_verified_at;
+
+    $response = $this->actingAs($user)
+        ->from(route('profile.edit'))
+        ->patch(route('profile.update'), [
+            'name' => 'Attempted name change',
+            'email' => $email,
+        ]);
+
+    $response->assertRedirectToRoute('profile.edit')
+        ->assertSessionHasErrors('email')
+        ->assertInertiaFlashMissing('toast');
+
+    expect($user->fresh()->name)->toBe('Original name');
+    expect($user->fresh()->email)->toBe($originalEmail);
+    expect($user->fresh()->email_verified_at)->toEqual($verifiedAt);
+})->with([
+    'null email' => [null],
+    'empty email' => [''],
+    'changed email' => ['changed@example.com'],
+]);
 
 test('account deletion is forbidden even with the correct password', function () {
     $user = User::factory()->create();
