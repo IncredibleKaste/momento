@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\EmailUpdatesController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Support\ProblemReportController;
@@ -14,6 +15,9 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('settings/email-updates', [EmailUpdatesController::class, 'edit'])->name('email-updates.edit');
+    Route::patch('settings/email-updates', [EmailUpdatesController::class, 'update'])->name('email-updates.update');
+
     Route::delete('settings/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     Route::get('settings/security', [SecurityController::class, 'edit'])

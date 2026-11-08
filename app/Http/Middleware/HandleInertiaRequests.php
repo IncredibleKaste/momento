@@ -35,7 +35,7 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
-        return [
+        $shared = [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
@@ -43,5 +43,11 @@ class HandleInertiaRequests extends Middleware
             ],
             'sidebarOpen' => $request->cookie('sidebar_state') === 'true',
         ];
+
+        if ($request->routeIs('email-updates.unsubscribe*')) {
+            unset($shared['auth']);
+        }
+
+        return $shared;
     }
 }

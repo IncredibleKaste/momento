@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EmailUpdatesUnsubscribeController;
 use App\Http\Controllers\FollowController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\PeopleSearchController;
@@ -10,6 +11,11 @@ use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
 
 Route::inertia('/', 'welcome')->name('home');
+
+Route::get('email-updates/unsubscribe/{user}', [EmailUpdatesUnsubscribeController::class, 'confirm'])
+    ->whereNumber('user')->middleware('signed')->name('email-updates.unsubscribe.confirm');
+Route::post('email-updates/unsubscribe/{user}', [EmailUpdatesUnsubscribeController::class, 'unsubscribe'])
+    ->whereNumber('user')->middleware('signed')->name('email-updates.unsubscribe');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
