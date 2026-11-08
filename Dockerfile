@@ -1,7 +1,17 @@
 # syntax=docker/dockerfile:1
 FROM dunglas/frankenphp:1-php8.5-trixie AS php
 
-RUN install-php-extensions pdo_pgsql redis imagick intl zip bcmath mbstring \
+COPY docker/patch-php-parser-download.php /tmp/patch-php-parser-download.php
+COPY tests/Runtime/PhpParserDownloadPatchProbe.php /tmp/PhpParserDownloadPatchProbe.php
+RUN stub_generator="$(php-config --prefix)/lib/php/build/gen_stub.php" \
+    && cp -p "$stub_generator" /tmp/gen_stub.php.original \
+    && php /tmp/PhpParserDownloadPatchProbe.php "$stub_generator" /tmp/patch-php-parser-download.php \
+    && php /tmp/patch-php-parser-download.php "$stub_generator" \
+    && php -l "$stub_generator" \
+    && rm /tmp/patch-php-parser-download.php /tmp/PhpParserDownloadPatchProbe.php \
+    && install-php-extensions pdo_pgsql redis imagick intl zip bcmath mbstring \
+    && cp -p /tmp/gen_stub.php.original "$stub_generator" \
+    && rm /tmp/gen_stub.php.original \
     && apt-get update \
     && apt-get install -y --no-install-recommends libheif-plugin-libde265 libheif-plugin-x265 \
     && rm -rf /var/lib/apt/lists/* \
