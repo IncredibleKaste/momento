@@ -14,7 +14,7 @@ beforeEach(function () {
     config([
         'services.problem_reports.recipient' => 'support@example.test',
         'services.problem_reports.mailer' => 'smtp',
-        'mail.mailers.smtp' => ['transport' => 'smtp'],
+        'mail.mailers.smtp' => ['transport' => 'smtp', 'url' => 'smtp://localhost'],
     ]);
 });
 
@@ -135,6 +135,15 @@ it('fails closed when the operator or a real mail transport is not configured', 
     'array transport' => [['services.problem_reports.mailer' => 'array', 'mail.mailers.array.transport' => 'array']],
     'log transport' => [['services.problem_reports.mailer' => 'log', 'mail.mailers.log.transport' => 'log']],
     'failover transport' => [['services.problem_reports.mailer' => 'failover', 'mail.mailers.failover.transport' => 'failover']],
+    'smtp URL resolving to log' => [[
+        'mail.mailers.smtp' => ['transport' => 'smtp', 'url' => 'log://localhost'],
+    ]],
+    'smtp URL resolving to array' => [[
+        'mail.mailers.smtp' => ['transport' => 'smtp', 'url' => 'array://localhost'],
+    ]],
+    'malformed mailer URL' => [[
+        'mail.mailers.smtp' => ['transport' => 'smtp', 'url' => 'smtp://host:abc'],
+    ]],
 ]);
 
 it('limits reports per member while allowing another member to report', function () {

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Support;
 
 use App\Http\Controllers\Controller;
+use App\Mail\DeliveryMailerConfiguration;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Mail\Message;
@@ -29,18 +30,10 @@ class ProblemReportController extends Controller
 
         $recipient = config('services.problem_reports.recipient');
         $mailerName = config('services.problem_reports.mailer');
-        $mailers = config('mail.mailers');
-        $mailerConfig = is_string($mailerName) && is_array($mailers)
-            ? ($mailers[$mailerName] ?? null)
-            : null;
-        $transport = is_array($mailerConfig) ? ($mailerConfig['transport'] ?? null) : null;
-        $acceptedTransports = ['smtp', 'ses', 'ses-v2', 'sendmail', 'mailgun', 'postmark', 'resend'];
 
         if (! is_string($recipient)
             || filter_var($recipient, FILTER_VALIDATE_EMAIL) === false
-            || ! is_string($mailerName)
-            || ! is_string($transport)
-            || ! in_array($transport, $acceptedTransports, true)) {
+            || ! app(DeliveryMailerConfiguration::class)->isConfiguredForDelivery($mailerName)) {
             return back()->withErrors([
                 'description' => 'Reports cannot be sent right now. Your draft is still here. Please try again later.',
             ]);
