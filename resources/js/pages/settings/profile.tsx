@@ -64,11 +64,17 @@ export default function Profile({
                                     required
                                     autoComplete="name"
                                     placeholder="Full name"
+                                    aria-invalid={Boolean(errors.name)}
+                                    aria-describedby={
+                                        errors.name ? 'name-error' : undefined
+                                    }
                                 />
 
                                 <InputError
+                                    id="name-error"
                                     className="mt-2"
                                     message={errors.name}
+                                    role="alert"
                                 />
                             </div>
 
@@ -84,11 +90,17 @@ export default function Profile({
                                     required
                                     autoComplete="username"
                                     placeholder="Email address"
+                                    aria-invalid={Boolean(errors.email)}
+                                    aria-describedby={
+                                        errors.email ? 'email-error' : undefined
+                                    }
                                 />
 
                                 <InputError
+                                    id="email-error"
                                     className="mt-2"
                                     message={errors.email}
+                                    role="alert"
                                 />
                             </div>
 
