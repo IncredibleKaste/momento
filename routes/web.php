@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmailUpdatesUnsubscribeController;
 use App\Http\Controllers\FollowController;
@@ -21,6 +22,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
     Route::get('people', PeopleSearchController::class)->middleware('throttle:people-search')->name('people.index');
     Route::get('following', [FollowController::class, 'index'])->name('following.index');
+    Route::get('messages', [ConversationController::class, 'index'])->name('messages.index');
+    Route::get('messages/{conversation}', [ConversationController::class, 'show'])->whereNumber('conversation')->name('messages.show');
+    Route::post('members/{member}/messages', [ConversationController::class, 'store'])->whereNumber('member')->name('messages.store');
+    Route::post('messages/{conversation}/send', [ConversationController::class, 'send'])->whereNumber('conversation')->middleware('throttle:message-send')->name('messages.send');
+    Route::post('messages/{conversation}/read/{message}', [ConversationController::class, 'read'])
+        ->whereNumber('conversation')->whereNumber('message')->name('messages.read');
     Route::get('members/{member}', [MemberController::class, 'show'])->whereNumber('member')->name('members.show');
     Route::post('members/{member}/follow-requests', [FollowController::class, 'store'])
         ->whereNumber('member')->middleware('throttle:follow-requests')->name('follows.store');

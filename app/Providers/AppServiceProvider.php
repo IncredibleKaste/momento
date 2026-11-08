@@ -41,6 +41,17 @@ class AppServiceProvider extends ServiceProvider
         });
         RateLimiter::for('follow-actions', fn (Request $request): Limit => Limit::perMinute(60)
             ->by('follow-actions:'.$request->user()->getAuthIdentifier())->response($this->followLimitResponse(...)));
+        RateLimiter::for('message-send', fn (Request $request): Limit => Limit::perMinute(60)
+            ->by('message-send:'.$request->user()->getAuthIdentifier())
+            ->response(function (Request $request, array $headers): Response {
+                $message = 'Too many messages. Wait a minute, then retry your draft.';
+                $conversation = $request->route('conversation');
+                if ($request->header('X-Inertia') && is_numeric($conversation)) {
+                    return to_route('messages.show', $conversation)->withErrors(['body' => $message])->withHeaders($headers);
+                }
+
+                return response()->json(['message' => $message], 429, $headers);
+            }));
         RateLimiter::for('people-search', fn (Request $request): Limit => Limit::perMinute(60)
             ->by('people-search:'.$request->user()->getAuthIdentifier()));
         RateLimiter::for('problem-reports', fn (Request $request): Limit => Limit::perMinute(3)
