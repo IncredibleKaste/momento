@@ -79,7 +79,9 @@ function PhotoPostCard({ post }: { post: PhotoPost }) {
                             {initials(post.author.name)}
                         </AvatarFallback>
                     </Avatar>
-                    <span className="min-w-0 break-words">{post.author.name}</span>
+                    <span className="min-w-0 break-words">
+                        {post.author.name}
+                    </span>
                 </Link>
                 <time
                     className="feed-post-time"
