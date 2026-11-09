@@ -5,7 +5,8 @@
   <policy domain="resource" name="disk" value="2GiB"/>
   <policy domain="resource" name="thread" value="1"/>
   <policy domain="resource" name="time" value="120"/>
-  <policy domain="resource" name="list-length" value="1"/>
+  <!-- ImageMagick requires list length to be strictly below this limit. -->
+  <policy domain="resource" name="list-length" value="2"/>
   <policy domain="resource" name="width" value="50000"/>
   <policy domain="resource" name="height" value="50000"/>
   <policy domain="resource" name="temporary-path" value="/tmp"/>

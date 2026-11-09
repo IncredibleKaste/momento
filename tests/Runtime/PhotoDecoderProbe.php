@@ -255,7 +255,7 @@ function verifyDedicatedPolicy(string $generatedImagePath, string $jpeg): void
         .'$limits = ['
         .'Imagick::RESOURCETYPE_MEMORY => 268435456, Imagick::RESOURCETYPE_MAP => 536870912, '
         .'Imagick::RESOURCETYPE_DISK => 2147483648, Imagick::RESOURCETYPE_THREAD => 1, '
-        .'Imagick::RESOURCETYPE_TIME => 120, Imagick::RESOURCETYPE_LISTLENGTH => 1, '
+        .'Imagick::RESOURCETYPE_TIME => 120, Imagick::RESOURCETYPE_LISTLENGTH => 2, '
         .'Imagick::RESOURCETYPE_WIDTH => 50000, Imagick::RESOURCETYPE_HEIGHT => 50000]; '
         .'foreach ($limits as $resource => $limit) { if (Imagick::getResourceLimit($resource) > $limit) { exit(30); } '
         .'Imagick::setResourceLimit($resource, $limit + 1); if (Imagick::getResourceLimit($resource) > $limit) { exit(31); } } '
