@@ -112,6 +112,7 @@ jobs:
           DB_PASSWORD: ci-only-password
           CACHE_STORE: array
           MOMENTO_F07_CONCURRENCY: '1'
+          MOMENTO_F25_CONCURRENCY: '1'
         run: |
           php artisan test --compact \
             tests/Feature/PhotoPostVisibilityTest.php \
@@ -120,7 +121,8 @@ jobs:
             tests/Feature/PhotoPostConcurrencyTest.php \
             tests/Feature/PhotoDetailTest.php \
             tests/Feature/PhotoFeedTest.php \
-            tests/Feature/ProfilePhotoTest.php
+            tests/Feature/ProfilePhotoTest.php \
+            tests/Feature/PhotoPostDeletionTest.php
 
       - name: Check photo likes with PostgreSQL
         env:

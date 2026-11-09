@@ -11,6 +11,7 @@ enum PhotoPostStatus: string
     case Failed = 'failed';
     case CancelRequested = 'cancel_requested';
     case Cancelled = 'cancelled';
+    case Deleted = 'deleted';
 
     public function isActive(): bool
     {
