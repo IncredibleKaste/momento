@@ -1,6 +1,10 @@
 import { Head, Link, router, usePoll } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
+import BookmarkButton from '@/components/bookmark-button';
+import { PhotoCommentsPanel } from '@/components/photo-comments-panel';
+import PhotoLikeButton from '@/components/photo-like-button';
 import { Button } from '@/components/ui/button';
+import { show as showMember } from '@/routes/members';
 import { create, cancel } from '@/routes/photo-posts';
 import PhotoPostComposer from './composer';
 import {
@@ -14,6 +18,12 @@ import {
 type Props = {
     photoPost: PhotoPost;
     limits: PhotoPostLimits;
+    detail: {
+        author: { id: number; name: string };
+        createdAt: string | null;
+        likeState: { liked: boolean; revision: number };
+        saveState: { saved: boolean; revision: number };
+    } | null;
 };
 
 const statusCopy: Record<PhotoPost['status'], string> = {
@@ -62,7 +72,11 @@ function ReadyPhotoImage({ src, alt }: { src: string; alt: string }) {
     );
 }
 
-export default function ShowPhotoPost({ photoPost, limits }: Props) {
+export default function ShowPhotoPost(props: Props) {
+    return <PhotoPostPage key={props.photoPost.id} {...props} />;
+}
+
+function PhotoPostPage({ photoPost, limits, detail }: Props) {
     const [canceling, setCanceling] = useState(false);
     const [cancelError, setCancelError] = useState(false);
     const isActive = isPhotoPostPolling(photoPost.status);
@@ -70,7 +84,7 @@ export default function ShowPhotoPost({ photoPost, limits }: Props) {
     const retryKey = retryAvailable ? photoPost.retryKey : null;
     const poll = usePoll(
         5000,
-        { only: ['photoPost'] },
+        { only: ['photoPost', 'detail'] },
         { autoStart: false, mode: 'rest' },
     );
 
@@ -136,6 +150,28 @@ export default function ShowPhotoPost({ photoPost, limits }: Props) {
 
                 {photoPost.status === 'ready' && photoPost.mediaUrl && (
                     <article className="overflow-hidden rounded-lg border border-border bg-card">
+                        {detail && (
+                            <header className="flex flex-wrap items-center justify-between gap-2 p-4">
+                                <Link
+                                    href={showMember(detail.author.id)}
+                                    prefetch={false}
+                                    className="inline-flex min-h-11 items-center font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                >
+                                    {detail.author.name}
+                                </Link>
+                                {detail.createdAt && (
+                                    <time
+                                        dateTime={detail.createdAt}
+                                        className="text-sm text-muted-foreground"
+                                    >
+                                        {new Intl.DateTimeFormat(undefined, {
+                                            dateStyle: 'medium',
+                                            timeStyle: 'short',
+                                        }).format(new Date(detail.createdAt))}
+                                    </time>
+                                )}
+                            </header>
+                        )}
                         <ReadyPhotoImage
                             key={JSON.stringify([
                                 photoPost.id,
@@ -149,7 +185,26 @@ export default function ShowPhotoPost({ photoPost, limits }: Props) {
                                 {photoPost.caption}
                             </p>
                         )}
+                        {detail && (
+                            <div
+                                aria-label="Your photo actions"
+                                className="flex items-start gap-2 border-t border-border px-3 py-2"
+                            >
+                                <PhotoLikeButton
+                                    postId={photoPost.id}
+                                    {...detail.likeState}
+                                />
+                                <BookmarkButton
+                                    postId={photoPost.id}
+                                    {...detail.saveState}
+                                />
+                            </div>
+                        )}
                     </article>
+                )}
+
+                {photoPost.status === 'ready' && detail && (
+                    <PhotoCommentsPanel photoPostId={photoPost.id} />
                 )}
 
                 {photoPost.status === 'ready' && !photoPost.mediaUrl && (
@@ -165,7 +220,7 @@ export default function ShowPhotoPost({ photoPost, limits }: Props) {
                             variant="outline"
                             className="min-h-11"
                             onClick={() =>
-                                router.reload({ only: ['photoPost'] })
+                                router.reload({ only: ['photoPost', 'detail'] })
                             }
                         >
                             Refresh photo

@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Actions\ManagePhotoPosts;
+use App\Actions\PhotoLikeState;
 use App\Enums\PhotoPostFailure;
 use App\Enums\PhotoPostStatus;
 use App\Exceptions\PhotoDecoderException;
 use App\Models\PhotoPost;
+use App\Models\PhotoSave;
 use App\Services\PhotoAccess;
 use App\Services\PhotoDecoder;
 use Illuminate\Http\Request;
@@ -49,7 +51,7 @@ class PhotoPostController
         return to_route('photo-posts.show', $post)->withHeaders(['Cache-Control' => 'private, no-store']);
     }
 
-    public function show(Request $request, PhotoPost $photoPost): Response
+    public function show(Request $request, PhotoPost $photoPost, PhotoLikeState $likes, PhotoAccess $access): Response
     {
         $viewer = $request->user();
         $owner = $viewer->is($photoPost->user);
@@ -69,6 +71,18 @@ class PhotoPostController
                 })
                 ->whereKeyNot($photoPost->id)->exists();
         $failure = $photoPost->failure_code === null ? null : PhotoPostFailure::tryFrom($photoPost->failure_code);
+        $detail = null;
+        if ($isReady) {
+            $likeState = $likes->forViewer($viewer, [$photoPost->id], $access)[$photoPost->id] ?? null;
+            abort_if($likeState === null, 404);
+            $saved = PhotoSave::query()->where('user_id', $viewer->id)->where('photo_post_id', $photoPost->id)->first();
+            $detail = [
+                'author' => ['id' => $photoPost->user->id, 'name' => $photoPost->user->name],
+                'createdAt' => $photoPost->created_at?->toISOString(),
+                'likeState' => $likeState,
+                'saveState' => ['saved' => (bool) ($saved->is_saved ?? false), 'revision' => (int) ($saved->revision ?? 0)],
+            ];
+        }
 
         $response = Inertia::render('photo-posts/show', [
             'photoPost' => [
@@ -81,6 +95,7 @@ class PhotoPostController
                 'retryKey' => $canRetry ? $photoPost->idempotency_key : null,
                 'failure' => $failure === null ? null : ['code' => $failure->value, 'message' => $failure->message()],
             ],
+            'detail' => $detail,
             'limits' => $this->limits(),
         ])->toResponse($request);
         $response->headers->set('Cache-Control', 'private, no-store');

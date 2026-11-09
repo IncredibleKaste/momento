@@ -1,5 +1,6 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
+    Bookmark,
     House,
     ImagePlus,
     MessageCircle,
@@ -27,6 +28,7 @@ import { show as profile } from '@/routes/members';
 import { index as people } from '@/routes/people';
 import { index as messages } from '@/routes/messages';
 import { create as createPhotoPost } from '@/routes/photo-posts';
+import { index as saved } from '@/routes/saved';
 import type { NavItem } from '@/types';
 
 export function AppSidebar() {
@@ -35,6 +37,7 @@ export function AppSidebar() {
     const mainNavItems: NavItem[] = [
         { title: 'Home', href: dashboard(), icon: House },
         { title: 'Create photo', href: createPhotoPost(), icon: ImagePlus },
+        { title: 'Saved', href: saved(), icon: Bookmark },
         { title: 'Profile', href: profile(auth.user.id), icon: UserRound },
         { title: 'Following', href: following(), icon: UsersRound },
         { title: 'Messages', href: messages(), icon: MessageCircle },
