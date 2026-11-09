@@ -115,7 +115,7 @@ jobs:
           CACHE_STORE: redis
           CACHE_PREFIX: microsoft-test-${{ github.run_id }}-${{ github.run_attempt }}-
           MOMENTO_MICROSOFT_CONCURRENCY: '1'
-        run: php artisan test --compact tests/Feature/Auth/MicrosoftAuthenticationTest.php
+        run: php artisan test --compact tests/Feature/Auth/MicrosoftAuthenticationTest.php tests/Feature/CaseInsensitiveContactEmailMigrationTest.php
 
       - name: Check two-factor concurrency with PostgreSQL and Redis
         env:
