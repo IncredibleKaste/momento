@@ -117,7 +117,8 @@ jobs:
             tests/Feature/PhotoPostVisibilityTest.php \
             tests/Feature/PhotoPostAccessTest.php \
             tests/Feature/PhotoPostLifecycleTest.php \
-            tests/Feature/PhotoPostConcurrencyTest.php
+            tests/Feature/PhotoPostConcurrencyTest.php \
+            tests/Feature/ProfilePhotoTest.php
 
       - name: Check two-factor concurrency with PostgreSQL and Redis
         env:
