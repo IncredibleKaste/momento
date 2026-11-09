@@ -7,7 +7,7 @@ import photoLikes from '../routes/photo-likes';
 type LikeState = { liked: boolean; revision: number };
 type LikeIntent = LikeState & { request_id: string };
 
-type Props = LikeState & { postId: number };
+type Props = LikeState & { postId: number; compact?: boolean };
 
 function isLikeState(value: unknown): value is LikeState {
     if (typeof value !== 'object' || value === null) return false;
@@ -24,7 +24,12 @@ export default function PhotoLikeButton(props: Props) {
     return <PhotoLikeButtonState key={props.postId} {...props} />;
 }
 
-function PhotoLikeButtonState({ postId, liked, revision }: Props) {
+function PhotoLikeButtonState({
+    postId,
+    liked,
+    revision,
+    compact = false,
+}: Props) {
     const [state, setState] = useState<LikeState>({ liked, revision });
     const [pending, setPending] = useState<LikeIntent | null>(null);
     const [error, setError] = useState('');
@@ -122,17 +127,18 @@ function PhotoLikeButtonState({ postId, liked, revision }: Props) {
             <Button
                 type="button"
                 variant="ghost"
+                size={compact ? 'icon' : 'default'}
                 aria-label={state.liked ? 'Unlike photo' : 'Like photo'}
                 aria-pressed={state.liked}
                 disabled={request.processing || pending !== null}
                 onClick={toggle}
-                className="min-h-11 min-w-11 px-3"
+                className={compact ? 'size-11' : 'min-h-11 min-w-11 px-3'}
             >
                 <Heart
                     aria-hidden="true"
                     className={state.liked ? 'fill-current text-rose-600' : ''}
                 />
-                <span>{state.liked ? 'Liked' : 'Like'}</span>
+                {!compact && <span>{state.liked ? 'Liked' : 'Like'}</span>}
             </Button>
             {pending && error && !request.processing && (
                 <Button

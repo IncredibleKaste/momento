@@ -88,6 +88,29 @@ it('hides and later restores a saved post as directional approval changes', func
         ->where('savedPosts.data.0.caption', 'Private caption'));
 });
 
+it('returns to the same feed cursor with acknowledged state after saving', function () {
+    $this->freezeTime();
+    $viewer = User::factory()->create();
+    $posts = PhotoPost::factory()->count(13)->for($viewer)->create(['status' => PhotoPostStatus::Ready]);
+    $firstPage = $this->actingAs($viewer)->get(route('dashboard'));
+    $page = json_decode(json_encode($firstPage->viewData('page')), true);
+    $cursor = $page['props']['photoPosts']['nextCursor'];
+    expect($cursor)->toBeString()->not->toBeEmpty();
+    $cursorUrl = route('dashboard', ['postsCursor' => $cursor]);
+    $post = $posts->first();
+
+    $this->from($cursorUrl)->post(route('photo-saves.update', $post), saveRequest($post, true, 0, 'ed4627a3-dfa3-47ef-bbe6-50c9727fcd14'))
+        ->assertRedirect($cursorUrl)
+        ->assertHeader('Cache-Control', 'no-store, private');
+
+    $this->assertDatabaseHas('photo_saves', ['user_id' => $viewer->id, 'photo_post_id' => $post->id, 'is_saved' => true, 'revision' => 1]);
+    $this->get($cursorUrl)->assertInertia(fn (Assert $page) => $page
+        ->has('photoPosts.data', 1)
+        ->where('photoPosts.data.0.id', $post->id)
+        ->where('photoPosts.data.0.saveState', ['saved' => true, 'revision' => 1])
+        ->where('photoPosts.nextCursor', null));
+});
+
 it('orders new saves and resaves by acknowledged intent even within one clock tick', function () {
     $this->freezeTime();
     $owner = User::factory()->create();
