@@ -22,7 +22,7 @@ function photoPostDeletionUpload(string $caption): UploadedFile
     return UploadedFile::fake()->createWithContent('camera.jpg', $jpeg);
 }
 
-function readyPhotoPost(User $owner, array $attributes = []): PhotoPost
+function readyDeletionPhotoPost(User $owner, array $attributes = []): PhotoPost
 {
     return PhotoPost::factory()->for($owner)->create(array_merge([
         'status' => PhotoPostStatus::Ready,
@@ -35,7 +35,7 @@ function readyPhotoPost(User $owner, array $attributes = []): PhotoPost
 
 it('deletes an owned ready post, immediately hides it, and retains a non-content tombstone', function () {
     $owner = User::factory()->create();
-    $post = readyPhotoPost($owner, [
+    $post = readyDeletionPhotoPost($owner, [
         'caption' => 'A private caption canary',
         'processed_bytes_charged' => 73,
     ]);
@@ -70,7 +70,7 @@ it('deletes an owned ready post, immediately hides it, and retains a non-content
 it('denies another account and keeps the ready post untouched', function () {
     $owner = User::factory()->create();
     $other = User::factory()->create();
-    $post = readyPhotoPost($owner);
+    $post = readyDeletionPhotoPost($owner);
     $disk = Storage::fake('photo_posts');
     $disk->put($post->output_key, 'synthetic private WebP');
 
@@ -89,7 +89,7 @@ it('projects delete permission only to the owner of a ready post', function () {
         'follower_id' => $follower->id,
         'followed_id' => $owner->id,
     ]);
-    $post = readyPhotoPost($owner);
+    $post = readyDeletionPhotoPost($owner);
     $version = app(HandleInertiaRequests::class)->version(Request::create('/'));
     $headers = ['X-Inertia' => 'true', 'X-Inertia-Version' => $version ?? ''];
 
@@ -109,7 +109,7 @@ it('does not resurrect a deleted operation on replay and gives repeat deletion a
     $caption = 'The same input';
     $upload = photoPostDeletionUpload($caption);
     $inputHash = hash_file('sha256', $upload->getRealPath());
-    $post = readyPhotoPost($owner, [
+    $post = readyDeletionPhotoPost($owner, [
         'caption' => $caption,
         'idempotency_key' => (string) Str::uuid(),
         'request_fingerprint' => hash('sha256', $inputHash."\0".$caption),
@@ -134,7 +134,7 @@ it('does not resurrect a deleted operation on replay and gives repeat deletion a
 
 it('keeps deleted media charged after storage failure and releases it only after verified reconciliation', function () {
     $owner = User::factory()->create();
-    $post = readyPhotoPost($owner, ['processed_bytes_charged' => 91]);
+    $post = readyDeletionPhotoPost($owner, ['processed_bytes_charged' => 91]);
     $root = Storage::fake('photo_posts')->path('');
     $objects = [$post->raw_key => true, $post->output_key => true];
     $allowDelete = false;
@@ -174,7 +174,7 @@ it('keeps deleted media charged after storage failure and releases it only after
 
 it('keeps a deletion tombstone and charge when storage is removed but the accounting transaction fails', function () {
     $owner = User::factory()->create();
-    $post = readyPhotoPost($owner, ['processed_bytes_charged' => 44]);
+    $post = readyDeletionPhotoPost($owner, ['processed_bytes_charged' => 44]);
     $disk = Storage::fake('photo_posts');
     $disk->put($post->output_key, 'synthetic private WebP');
     $shouldFail = true;
@@ -245,7 +245,7 @@ it('serializes concurrent deletion retries under the same PostgreSQL operation g
     }
 
     $owner = User::factory()->create();
-    $post = readyPhotoPost($owner, ['processed_bytes_charged' => 65]);
+    $post = readyDeletionPhotoPost($owner, ['processed_bytes_charged' => 65]);
     $ownerId = $owner->id;
     $postId = $post->id;
     DB::commit();
