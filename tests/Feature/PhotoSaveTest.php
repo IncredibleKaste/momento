@@ -3,6 +3,7 @@
 use App\Actions\ManagePhotoSaves;
 use App\Enums\PhotoPostStatus;
 use App\Models\Follow;
+use App\Models\PhotoLike;
 use App\Models\PhotoPost;
 use App\Models\PhotoSave;
 use App\Models\User;
@@ -48,9 +49,16 @@ it('persists owner-private saves and returns only a narrow newest-first projecti
         ->assertHeader('Cache-Control', 'no-store, private')
         ->assertInertia(fn (Assert $page) => $page
             ->component('saved/index')
-            ->where('savedPosts.data.0.id', $newer->id)
-            ->where('savedPosts.data.0.caption', 'Latest photo')
-            ->where('savedPosts.data.0.author', ['id' => $viewer->id, 'name' => $viewer->name])
+            ->where('savedPosts.data.0', [
+                'id' => $newer->id,
+                'caption' => 'Latest photo',
+                'author' => ['id' => $viewer->id, 'name' => $viewer->name],
+                'revision' => 1,
+                'createdAt' => $newer->created_at->toIso8601String(),
+                'mediaUrl' => route('photo-posts.media', $newer),
+                'detailUrl' => route('photo-posts.show', $newer),
+                'likeState' => ['liked' => false, 'revision' => 0],
+            ])
             ->where('savedPosts.data.1.id', $older->id)
             ->where('savedPosts.total', 2)
             ->missing('savedPosts.data.0.raw_key')
@@ -61,6 +69,103 @@ it('persists owner-private saves and returns only a narrow newest-first projecti
     $this->actingAs(User::factory()->create())->get(route('saved.index'))
         ->assertInertia(fn (Assert $page) => $page->where('savedPosts.total', 0)->has('savedPosts.data', 0));
     expect(PhotoSave::query()->count())->toBe(2);
+});
+
+it('projects only the viewer like state and retains toggled-off revisions on saved cards', function () {
+    $viewer = User::factory()->create();
+    $author = User::factory()->create();
+    Follow::factory()->approved()->create(['follower_id' => $viewer->id, 'followed_id' => $author->id]);
+    $active = PhotoPost::factory()->for($author)->create(['status' => PhotoPostStatus::Ready]);
+    $off = PhotoPost::factory()->for($author)->create(['status' => PhotoPostStatus::Ready]);
+    $absent = PhotoPost::factory()->for($author)->create(['status' => PhotoPostStatus::Ready]);
+
+    foreach ([[$active, 3], [$off, 2], [$absent, 1]] as [$post, $order]) {
+        PhotoSave::query()->create([
+            'user_id' => $viewer->id,
+            'photo_post_id' => $post->id,
+            'is_saved' => true,
+            'revision' => 4,
+            'saved_order' => $order,
+            'last_request_id' => fake()->uuid(),
+        ]);
+    }
+    foreach ([[$viewer, $active, true, 3], [$viewer, $off, false, 8], [$author, $absent, true, 9]] as [$member, $post, $liked, $revision]) {
+        PhotoLike::query()->create([
+            'user_id' => $member->id,
+            'photo_post_id' => $post->id,
+            'liked' => $liked,
+            'revision' => $revision,
+        ]);
+    }
+
+    $this->actingAs($viewer)->get(route('saved.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('savedPosts.data', 3)
+            ->where('savedPosts.data.0.id', $active->id)
+            ->where('savedPosts.data.0.revision', 4)
+            ->where('savedPosts.data.0.likeState', ['liked' => true, 'revision' => 3])
+            ->where('savedPosts.data.1.id', $off->id)
+            ->where('savedPosts.data.1.likeState', ['liked' => false, 'revision' => 8])
+            ->where('savedPosts.data.2.id', $absent->id)
+            ->where('savedPosts.data.2.likeState', ['liked' => false, 'revision' => 0])
+            ->missing('savedPosts.data.0.likeState.user_id')
+            ->missing('savedPosts.data.0.likeState.last_request_id'));
+});
+
+it('omits saved cards and their media projection when the post or author becomes ineligible', function (string $change) {
+    $viewer = User::factory()->create();
+    $author = User::factory()->create();
+    Follow::factory()->approved()->create(['follower_id' => $viewer->id, 'followed_id' => $author->id]);
+    $post = PhotoPost::factory()->for($author)->create(['status' => PhotoPostStatus::Ready, 'caption' => 'Private saved caption']);
+    PhotoSave::query()->create([
+        'user_id' => $viewer->id,
+        'photo_post_id' => $post->id,
+        'is_saved' => true,
+        'revision' => 1,
+        'last_request_id' => fake()->uuid(),
+    ]);
+    match ($change) {
+        'deleted' => $post->forceFill(['status' => PhotoPostStatus::Deleted])->save(),
+        'queued' => $post->forceFill(['status' => PhotoPostStatus::Queued])->save(),
+        'unverified author' => $author->forceFill(['email_verified_at' => null])->save(),
+    };
+
+    $this->actingAs($viewer)->get(route('saved.index'))
+        ->assertHeader('Cache-Control', 'no-store, private')
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('savedPosts.data', 0)
+            ->where('savedPosts.total', 0));
+    $this->get(route('photo-posts.media', $post))->assertNotFound();
+})->with(['deleted', 'queued', 'unverified author']);
+
+it('returns to the same saved page after unsaving its final card', function () {
+    $viewer = User::factory()->create();
+    $posts = PhotoPost::factory()->count(13)->for($viewer)->create(['status' => PhotoPostStatus::Ready]);
+    foreach ($posts as $index => $post) {
+        PhotoSave::query()->create([
+            'user_id' => $viewer->id,
+            'photo_post_id' => $post->id,
+            'is_saved' => true,
+            'revision' => 1,
+            'saved_order' => $index + 1,
+            'last_request_id' => fake()->uuid(),
+        ]);
+    }
+    $pageUrl = route('saved.index', ['page' => 2]);
+    $this->actingAs($viewer)->get($pageUrl)->assertInertia(fn (Assert $page) => $page
+        ->has('savedPosts.data', 1)
+        ->where('savedPosts.data.0.id', $posts->first()->id));
+
+    $this->from($pageUrl)->post(route('photo-saves.update', $posts->first()), saveRequest($posts->first(), false, 1, 'c658fdc8-d907-4a02-b60d-e550cfd8e980'))
+        ->assertRedirect($pageUrl)
+        ->assertHeader('Cache-Control', 'no-store, private');
+
+    $this->assertDatabaseHas('photo_saves', ['user_id' => $viewer->id, 'photo_post_id' => $posts->first()->id, 'is_saved' => false, 'revision' => 2]);
+    $this->get($pageUrl)->assertInertia(fn (Assert $page) => $page
+        ->has('savedPosts.data', 0)
+        ->where('savedPosts.total', 12)
+        ->where('savedPosts.current_page', 2)
+        ->where('savedPosts.prev_page_url', route('saved.index', ['page' => 1])));
 });
 
 it('hides and later restores a saved post as directional approval changes', function () {

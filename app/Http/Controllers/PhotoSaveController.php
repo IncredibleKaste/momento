@@ -3,18 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Actions\ManagePhotoSaves;
+use App\Actions\PhotoLikeState;
 use App\Http\Requests\SetPhotoSaveRequest;
 use App\Models\PhotoPost;
 use App\Services\PhotoAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use stdClass;
 use Symfony\Component\HttpFoundation\Response;
 
 class PhotoSaveController extends Controller
 {
-    public function index(Request $request, PhotoAccess $access): Response
+    public function index(Request $request, PhotoAccess $access, PhotoLikeState $likes): Response
     {
         $viewer = $request->user();
         $savedPosts = $access->visiblePosts($viewer)
@@ -30,16 +32,23 @@ class PhotoSaveController extends Controller
             ->paginate(12, [
                 'photo_posts.id as id',
                 'photo_posts.caption as caption',
+                'photo_posts.created_at as created_at',
                 'authors.id as author_id',
                 'authors.name as author_name',
                 'photo_saves.revision as revision',
-            ])
-            ->through(static fn (stdClass $post): array => [
-                'id' => (int) $post->id,
-                'caption' => $post->caption,
-                'author' => ['id' => (int) $post->author_id, 'name' => (string) $post->author_name],
-                'revision' => (int) $post->revision,
             ]);
+        $pageIds = array_values(array_map(static fn (stdClass $post): int => (int) $post->id, $savedPosts->items()));
+        $likeStates = $likes->forViewer($viewer, $pageIds, $access);
+        $savedPosts->through(static fn (stdClass $post): array => [
+            'id' => (int) $post->id,
+            'caption' => $post->caption,
+            'author' => ['id' => (int) $post->author_id, 'name' => (string) $post->author_name],
+            'revision' => (int) $post->revision,
+            'createdAt' => Carbon::parse($post->created_at)->toIso8601String(),
+            'mediaUrl' => route('photo-posts.media', $post->id),
+            'detailUrl' => route('photo-posts.show', $post->id),
+            'likeState' => $likeStates[(int) $post->id] ?? ['liked' => false, 'revision' => 0],
+        ]);
 
         $response = Inertia::render('saved/index', [
             'savedPosts' => $savedPosts,
