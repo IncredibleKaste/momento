@@ -114,7 +114,8 @@ try {
                 throw new InvalidPhotoInput('Unsupported image format.');
             }
             validateDimensions($image->getImageWidth(), $image->getImageHeight());
-            if (! $image->autoOrient() || ! $image->setImageOrientation(Imagick::ORIENTATION_TOPLEFT)) {
+            $image->autoOrient();
+            if (! $image->setImageOrientation(Imagick::ORIENTATION_TOPLEFT)) {
                 throw new RuntimeException('Image orientation failed.');
             }
         } catch (ImagickException $exception) {
