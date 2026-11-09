@@ -54,6 +54,11 @@ class AppServiceProvider extends ServiceProvider
             }));
         RateLimiter::for('people-search', fn (Request $request): Limit => Limit::perMinute(60)
             ->by('people-search:'.$request->user()->getAuthIdentifier()));
+        RateLimiter::for('photo-posts', fn (Request $request): Limit => Limit::perMinute(5)
+            ->by('photo-posts:'.$request->user()->getAuthIdentifier())
+            ->response(fn (Request $request, array $headers): Response => to_route('photo-posts.create')
+                ->withErrors(['photo' => 'Too many photo uploads. Wait a minute, then try again.'])
+                ->withHeaders($headers)));
         RateLimiter::for('problem-reports', fn (Request $request): Limit => Limit::perMinute(3)
             ->by('problem-reports:'.$request->user()->getAuthIdentifier())
             ->response(fn (Request $request, array $headers): Response => to_route('problem-reports.create')

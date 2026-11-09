@@ -6,6 +6,7 @@ use App\Http\Controllers\EmailUpdatesUnsubscribeController;
 use App\Http\Controllers\FollowController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\PeopleSearchController;
+use App\Http\Controllers\PhotoPostController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -20,6 +21,11 @@ Route::post('email-updates/unsubscribe/{user}', [EmailUpdatesUnsubscribeControll
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+    Route::get('photo-posts/create', [PhotoPostController::class, 'create'])->name('photo-posts.create');
+    Route::post('photo-posts', [PhotoPostController::class, 'store'])->middleware('throttle:photo-posts')->name('photo-posts.store');
+    Route::get('photo-posts/{photoPost}/media', [PhotoPostController::class, 'media'])->whereNumber('photoPost')->name('photo-posts.media');
+    Route::post('photo-posts/{photoPost}/cancel', [PhotoPostController::class, 'cancel'])->whereNumber('photoPost')->name('photo-posts.cancel');
+    Route::get('photo-posts/{photoPost}', [PhotoPostController::class, 'show'])->whereNumber('photoPost')->name('photo-posts.show');
     Route::get('people', PeopleSearchController::class)->middleware('throttle:people-search')->name('people.index');
     Route::get('following', [FollowController::class, 'index'])->name('following.index');
     Route::get('messages', [ConversationController::class, 'index'])->name('messages.index');

@@ -1,6 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     House,
+    ImagePlus,
     MessageCircle,
     Search,
     UserRound,
@@ -25,6 +26,7 @@ import { index as following } from '@/routes/following';
 import { show as profile } from '@/routes/members';
 import { index as people } from '@/routes/people';
 import { index as messages } from '@/routes/messages';
+import { create as createPhotoPost } from '@/routes/photo-posts';
 import type { NavItem } from '@/types';
 
 export function AppSidebar() {
@@ -32,6 +34,7 @@ export function AppSidebar() {
     const { setOpenMobile } = useSidebar();
     const mainNavItems: NavItem[] = [
         { title: 'Home', href: dashboard(), icon: House },
+        { title: 'Create photo', href: createPhotoPost(), icon: ImagePlus },
         { title: 'Profile', href: profile(auth.user.id), icon: UserRound },
         { title: 'Following', href: following(), icon: UsersRound },
         { title: 'Messages', href: messages(), icon: MessageCircle },

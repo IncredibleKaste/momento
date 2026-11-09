@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -ne 0 ]; then
+    printf 'Invalid decoder invocation.\n' >&2
+    exit 64
+fi
+
+exec /usr/bin/env -i \
+    MAGICK_CONFIGURE_PATH=/usr/local/share/momento-photo-decoder-policy \
+    /usr/local/bin/php /usr/local/bin/photo-decoder.php

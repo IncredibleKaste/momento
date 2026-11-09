@@ -44,6 +44,15 @@ return [
             'after_commit' => false,
         ],
 
+        'photo_processing' => [
+            'driver' => 'database',
+            'connection' => null,
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => 'photo-processing',
+            'retry_after' => 160,
+            'after_commit' => false,
+        ],
+
         'beanstalkd' => [
             'driver' => 'beanstalkd',
             'host' => env('BEANSTALKD_QUEUE_HOST', 'localhost'),
