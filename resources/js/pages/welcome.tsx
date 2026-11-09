@@ -2,6 +2,7 @@ import { Head, Link, usePage } from '@inertiajs/react';
 import { Moon, RotateCcw, Sun } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
+import MomentoWordmark from '@/components/momento-wordmark';
 import { useAppearance } from '@/hooks/use-appearance';
 import { dashboard, home, login, register } from '@/routes';
 
@@ -110,12 +111,7 @@ export default function Welcome() {
                         className="welcome-brand"
                         aria-label="Momento home"
                     >
-                        Momento
-                        <span className="welcome-spectrum" aria-hidden="true">
-                            {[0, 1, 2, 3, 4].map((band) => (
-                                <span key={band} />
-                            ))}
-                        </span>
+                        <MomentoWordmark />
                     </Link>
                     <Button
                         type="button"

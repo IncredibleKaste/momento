@@ -1,5 +1,8 @@
+import { Link } from '@inertiajs/react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
+import MomentoWordmark from '@/components/momento-wordmark';
 import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
+import { dashboard } from '@/routes';
 import type { BreadcrumbItem as BreadcrumbItemType } from '@/types';
 
 export function AppSidebarHeader({
@@ -7,20 +10,20 @@ export function AppSidebarHeader({
 }: {
     breadcrumbs?: BreadcrumbItemType[];
 }) {
-    const { isMobile, open, openMobile } = useSidebar();
+    const { openMobile } = useSidebar();
 
     return (
-        <header className="flex min-h-24 shrink-0 items-center justify-between gap-4 py-6">
+        <header className="momento-header flex shrink-0 items-center justify-between gap-4">
             <div className="flex items-center gap-2">
                 <SidebarTrigger
-                    className="size-11"
+                    className="size-11 md:hidden"
                     aria-label="Toggle navigation"
-                    aria-expanded={isMobile ? openMobile : open}
-                    aria-controls="main-navigation"
+                    aria-expanded={openMobile}
+                    aria-controls={openMobile ? 'main-navigation' : undefined}
                 />
-                <span className="font-serif text-3xl tracking-tight">
-                    Momento
-                </span>
+                <Link href={dashboard()} aria-label="Momento home">
+                    <MomentoWordmark className="momento-wordmark" />
+                </Link>
             </div>
             <div className="hidden sm:block">
                 <Breadcrumbs breadcrumbs={breadcrumbs} />

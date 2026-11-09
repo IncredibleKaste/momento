@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import AppLogoIcon from '@/components/app-logo-icon';
+import MomentoWordmark from '@/components/momento-wordmark';
 import { home } from '@/routes';
 import type { AuthLayoutProps } from '@/types';
 
@@ -16,8 +16,7 @@ export default function AuthSimpleLayout({
                     className="mb-8 gap-3 font-serif text-3xl"
                     aria-label="Momento home"
                 >
-                    <AppLogoIcon className="size-8 shrink-0" />
-                    Momento
+                    <MomentoWordmark />
                 </Link>
                 <main>
                     <div className="mb-8 space-y-3">
