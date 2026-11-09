@@ -323,6 +323,147 @@
     max-width: 652px;
 }
 
+.home-feed .feed-people {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding: 3px 2px 15px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+
+.home-feed .feed-person {
+    flex: 0 0 92px;
+}
+
+.home-feed .feed-person-face {
+    width: 72px;
+    height: 72px;
+    border: 0;
+    border-radius: 50%;
+}
+
+.home-feed .feed-post {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    border-radius: 6px;
+}
+
+.home-feed .feed-post-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+}
+
+.home-feed .feed-author {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+
+.home-feed .feed-post-time {
+    flex-shrink: 0;
+    margin-left: auto;
+    color: var(--muted-foreground);
+    font-size: 10px;
+    text-align: right;
+}
+
+.home-feed .feed-photo {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 100svh;
+    object-fit: contain;
+    background: var(--card);
+}
+
+.home-feed .feed-post-bottom {
+    padding: 8px 16px 16px;
+}
+
+.home-feed .feed-post-actions {
+    display: flex;
+    align-items: flex-start;
+    gap: 5px;
+}
+
+.home-feed .feed-comments {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 44px;
+    padding-inline: 8px;
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+.home-feed .feed-caption {
+    padding-top: 7px;
+    font-size: 13px;
+    line-height: 1.75;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.home-feed .feed-post-end {
+    height: 1px;
+    opacity: 0.65;
+}
+
+.home-feed a:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .home-feed .feed-comments:hover {
+        background: var(--accent);
+    }
+
+    .home-feed .feed-author:hover {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+    }
+}
+
+@media (max-width: 540px) {
+    .home-feed .feed-people {
+        gap: 8px;
+    }
+
+    .home-feed .feed-person {
+        flex-basis: 75px;
+    }
+
+    .home-feed .feed-person-face {
+        width: 58px;
+        height: 58px;
+    }
+
+    .home-feed .feed-post-header {
+        gap: 7px;
+        padding: 7px 9px;
+    }
+
+    .home-feed .feed-post-bottom {
+        padding: 8px 10px 12px;
+    }
+
+    .home-feed .feed-caption {
+        font-size: 12px;
+    }
+}
+
 .momento-shell [data-slot='sidebar-inset'] {
     padding-inline: 20px;
 }

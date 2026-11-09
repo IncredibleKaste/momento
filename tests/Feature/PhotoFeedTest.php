@@ -2,7 +2,9 @@
 
 use App\Enums\PhotoPostStatus;
 use App\Models\Follow;
+use App\Models\PhotoLike;
 use App\Models\PhotoPost;
+use App\Models\PhotoSave;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -60,6 +62,8 @@ it('returns only the current member’s ready own and approved-follow photos', f
                     'author' => ['id' => $approved->id, 'name' => 'Approved author'],
                     'mediaUrl' => route('photo-posts.media', $approvedPost),
                     'detailUrl' => route('photo-posts.show', $approvedPost),
+                    'likeState' => ['liked' => false, 'revision' => 0],
+                    'saveState' => ['saved' => false, 'revision' => 0],
                 ],
                 [
                     'id' => $ownPost->id,
@@ -68,6 +72,8 @@ it('returns only the current member’s ready own and approved-follow photos', f
                     'author' => ['id' => $viewer->id, 'name' => $viewer->name],
                     'mediaUrl' => route('photo-posts.media', $ownPost),
                     'detailUrl' => route('photo-posts.show', $ownPost),
+                    'likeState' => ['liked' => false, 'revision' => 0],
+                    'saveState' => ['saved' => false, 'revision' => 0],
                 ],
             ])
             ->where('photoPosts.nextCursor', null)
@@ -76,6 +82,71 @@ it('returns only the current member’s ready own and approved-follow photos', f
             ->missing('photoPosts.data.0.output_key')
             ->missing('photoPosts.data.0.raw_key')
             ->missing('photoPosts.data.0.email'));
+});
+
+it('returns only viewer action states including toggled-off revisions and absent defaults', function () {
+    $this->freezeTime();
+    $viewer = User::factory()->create();
+    $other = User::factory()->create();
+    Follow::factory()->approved()->create(['follower_id' => $viewer->id, 'followed_id' => $other->id]);
+    $active = PhotoPost::factory()->for($other)->create(['status' => PhotoPostStatus::Ready]);
+    $off = PhotoPost::factory()->for($other)->create(['status' => PhotoPostStatus::Ready, 'created_at' => now()->subMinute()]);
+    $absent = PhotoPost::factory()->for($viewer)->create(['status' => PhotoPostStatus::Ready, 'created_at' => now()->subMinutes(2)]);
+
+    foreach ([[$viewer, $active, true, 3], [$viewer, $off, false, 8], [$other, $absent, true, 9]] as [$member, $post, $selected, $revision]) {
+        PhotoLike::query()->create([
+            'user_id' => $member->id,
+            'photo_post_id' => $post->id,
+            'liked' => $selected,
+            'revision' => $revision,
+        ]);
+        PhotoSave::query()->create([
+            'user_id' => $member->id,
+            'photo_post_id' => $post->id,
+            'is_saved' => $selected,
+            'revision' => $revision,
+            'last_request_id' => fake()->uuid(),
+        ]);
+    }
+
+    $this->actingAs($viewer)->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('photoPosts.data', 3)
+            ->where('photoPosts.data.0.id', $active->id)
+            ->where('photoPosts.data.0.likeState', ['liked' => true, 'revision' => 3])
+            ->where('photoPosts.data.0.saveState', ['saved' => true, 'revision' => 3])
+            ->where('photoPosts.data.1.id', $off->id)
+            ->where('photoPosts.data.1.likeState', ['liked' => false, 'revision' => 8])
+            ->where('photoPosts.data.1.saveState', ['saved' => false, 'revision' => 8])
+            ->where('photoPosts.data.2.id', $absent->id)
+            ->where('photoPosts.data.2.likeState', ['liked' => false, 'revision' => 0])
+            ->where('photoPosts.data.2.saveState', ['saved' => false, 'revision' => 0])
+            ->missing('photoPosts.data.0.likeState.user_id')
+            ->missing('photoPosts.data.0.saveState.last_request_id'));
+});
+
+it('omits posts and their action state after deletion or follow revocation', function () {
+    $viewer = User::factory()->create();
+    $follow = Follow::factory()->approved()->create(['follower_id' => $viewer->id]);
+    $deleted = PhotoPost::factory()->for($viewer)->create(['status' => PhotoPostStatus::Ready]);
+    $revoked = PhotoPost::factory()->for($follow->followed)->create(['status' => PhotoPostStatus::Ready]);
+
+    foreach ([$deleted, $revoked] as $post) {
+        PhotoLike::query()->create(['user_id' => $viewer->id, 'photo_post_id' => $post->id, 'liked' => true, 'revision' => 1]);
+        PhotoSave::query()->create([
+            'user_id' => $viewer->id,
+            'photo_post_id' => $post->id,
+            'is_saved' => true,
+            'revision' => 1,
+            'last_request_id' => fake()->uuid(),
+        ]);
+    }
+    $deleted->delete();
+    $follow->delete();
+
+    $this->actingAs($viewer)->get(route('dashboard'))
+        ->assertHeader('Cache-Control', 'no-store, private')
+        ->assertInertia(fn (Assert $page) => $page->has('photoPosts.data', 0));
 });
 
 it('uses a stable newest-first cursor and refresh starts from the latest post', function () {

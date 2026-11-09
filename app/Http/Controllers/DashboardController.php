@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\PhotoLikeState;
 use App\Models\PhotoPost;
+use App\Models\PhotoSave;
 use App\Services\PhotoAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -11,7 +13,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request, PhotoAccess $photoAccess): Response
+    public function __invoke(Request $request, PhotoAccess $photoAccess, PhotoLikeState $likes): Response
     {
         $viewer = $request->user();
 
@@ -40,6 +42,14 @@ class DashboardController extends Controller
                 'photo_posts.created_at',
             ], 'postsCursor');
 
+        $pageIds = array_values($photoPosts->getCollection()->map(fn (PhotoPost $post): int => $post->id)->all());
+        $likeStates = $likes->forViewer($viewer, $pageIds, $photoAccess);
+        $saveStates = PhotoSave::query()
+            ->where('user_id', $viewer->id)
+            ->whereIn('photo_post_id', $pageIds)
+            ->get(['photo_post_id', 'is_saved', 'revision'])
+            ->keyBy('photo_post_id');
+
         $posts = $photoPosts->getCollection()->map(fn (PhotoPost $post): array => [
             'id' => $post->id,
             'caption' => $post->caption,
@@ -50,6 +60,11 @@ class DashboardController extends Controller
             ],
             'mediaUrl' => route('photo-posts.media', $post),
             'detailUrl' => route('photo-posts.show', $post),
+            'likeState' => $likeStates[$post->id] ?? ['liked' => false, 'revision' => 0],
+            'saveState' => [
+                'saved' => (bool) ($saveStates->get($post->id)->is_saved ?? false),
+                'revision' => (int) ($saveStates->get($post->id)->revision ?? 0),
+            ],
         ])->values();
 
         $response = Inertia::render('dashboard', [
