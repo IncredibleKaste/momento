@@ -119,7 +119,8 @@ jobs:
             tests/Feature/PhotoPostLifecycleTest.php \
             tests/Feature/PhotoPostConcurrencyTest.php \
             tests/Feature/PhotoDetailTest.php \
-            tests/Feature/PhotoFeedTest.php
+            tests/Feature/PhotoFeedTest.php \
+            tests/Feature/ProfilePhotoTest.php
 
       - name: Check photo likes with PostgreSQL
         env:
