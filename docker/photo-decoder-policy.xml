@@ -13,7 +13,7 @@
 
   <policy domain="coder" rights="none" pattern="*"/>
   <policy domain="coder" rights="read" pattern="{JPEG,PNG,WEBP,HEIC,HEIF}"/>
-  <policy domain="coder" rights="write" pattern="WEBP"/>
+  <policy domain="coder" rights="read | write" pattern="WEBP"/>
   <policy domain="module" rights="none" pattern="*"/>
   <policy domain="module" rights="read | write" pattern="{JPEG,PNG,WEBP,HEIC}"/>
   <policy domain="delegate" rights="none" pattern="*"/>
