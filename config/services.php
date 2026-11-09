@@ -37,6 +37,11 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'problem_reports' => [
+        'recipient' => env('PROBLEM_REPORT_RECIPIENT'),
+        'mailer' => env('PROBLEM_REPORT_MAILER'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

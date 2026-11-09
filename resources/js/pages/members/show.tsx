@@ -5,13 +5,16 @@ import { useInitials } from '@/hooks/use-initials';
 import { dashboard } from '@/routes';
 import { index } from '@/routes/following';
 import { destroy, store } from '@/routes/follows';
+import { edit } from '@/routes/profile';
+import { store as startMessage } from '@/routes/messages';
 
 type Props = {
     member: { id: number; name: string };
     follow: { id: number; status: 'pending' | 'approved' } | null;
+    canMessage: boolean;
 };
 
-export default function Member({ member, follow }: Props) {
+export default function Member({ member, follow, canMessage }: Props) {
     const { auth } = usePage().props;
     const initials = useInitials();
     const own = auth.user.id === member.id;
@@ -52,10 +55,18 @@ export default function Member({ member, follow }: Props) {
                     </h1>
                 </header>
                 {own ? (
-                    <p className="text-sm text-muted-foreground">
-                        This is your profile. Share this page’s address so other
-                        Momento members can request to follow you.
-                    </p>
+                    <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">
+                            This is your profile. Share this page’s address so
+                            other Momento members can request to follow you.
+                        </p>
+                        <Link
+                            href={edit()}
+                            className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                        >
+                            Edit profile
+                        </Link>
+                    </div>
                 ) : (
                     <>
                         <p className="text-sm text-muted-foreground">
@@ -88,6 +99,16 @@ export default function Member({ member, follow }: Props) {
                                 label="Request to follow"
                                 memberName={member.name}
                             />
+                        )}
+                        {canMessage && (
+                            <Link
+                                href={startMessage(member.id)}
+                                method="post"
+                                as="button"
+                                className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                            >
+                                Message
+                            </Link>
                         )}
                     </>
                 )}

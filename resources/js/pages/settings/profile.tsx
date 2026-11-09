@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { edit } from '@/routes/profile';
+import { show } from '@/routes/members';
 import type { Auth } from '@/types';
 import { send } from '@/routes/verification';
 
@@ -16,11 +17,9 @@ type PageProps = {
 
 export default function Profile({
     mustVerifyEmail,
-    canChangeEmail,
     status,
 }: {
     mustVerifyEmail: boolean;
-    canChangeEmail: boolean;
     status?: string;
 }) {
     const { auth } = usePage<PageProps>().props;
@@ -35,12 +34,15 @@ export default function Profile({
                 <Heading
                     variant="small"
                     title="Profile"
-                    description={
-                        canChangeEmail
-                            ? 'Update your name and email address'
-                            : 'Update your name. Contact email changes are not available yet.'
-                    }
+                    description="Update your name and view your account email"
                 />
+
+                <Link
+                    href={show(auth.user.id)}
+                    className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                >
+                    View profile
+                </Link>
 
                 <Form
                     {...ProfileController.update.form()}
@@ -62,11 +64,17 @@ export default function Profile({
                                     required
                                     autoComplete="name"
                                     placeholder="Full name"
+                                    aria-invalid={Boolean(errors.name)}
+                                    aria-describedby={
+                                        errors.name ? 'name-error' : undefined
+                                    }
                                 />
 
                                 <InputError
+                                    id="name-error"
                                     className="mt-2"
                                     message={errors.name}
+                                    role="alert"
                                 />
                             </div>
 
@@ -78,31 +86,13 @@ export default function Profile({
                                     type="email"
                                     className="mt-1 block w-full"
                                     defaultValue={auth.user.email}
-                                    name="email"
-                                    required
-                                    autoComplete="username"
-                                    placeholder="Email address"
-                                    readOnly={!canChangeEmail}
-                                    aria-describedby={
-                                        canChangeEmail
-                                            ? undefined
-                                            : 'email-help'
-                                    }
+                                    readOnly
+                                    aria-readonly="true"
                                 />
-
-                                {!canChangeEmail && (
-                                    <p
-                                        id="email-help"
-                                        className="text-sm text-muted-foreground"
-                                    >
-                                        Read-only for Microsoft-only accounts.
-                                    </p>
-                                )}
-
-                                <InputError
-                                    className="mt-2"
-                                    message={errors.email}
-                                />
+                                <p className="text-sm text-muted-foreground">
+                                    Email address changes are not available
+                                    here.
+                                </p>
                             </div>
 
                             {mustVerifyEmail &&

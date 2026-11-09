@@ -1,5 +1,12 @@
 import { Link, router } from '@inertiajs/react';
-import { LogOut, Monitor, Moon, Sun } from 'lucide-react';
+import {
+    LogOut,
+    MessageSquareWarning,
+    Monitor,
+    Moon,
+    Sun,
+    UserRound,
+} from 'lucide-react';
 import {
     DropdownMenuGroup,
     DropdownMenuItem,
@@ -10,6 +17,8 @@ import { UserInfo } from '@/components/user-info';
 import { useAppearance } from '@/hooks/use-appearance';
 import { logout } from '@/routes';
 import { edit as editAppearance } from '@/routes/appearance';
+import { edit as editProfile } from '@/routes/profile';
+import { create as reportProblem } from '@/routes/problem-reports';
 import type { User } from '@/types';
 
 type Props = {
@@ -34,6 +43,12 @@ export function UserMenuContent({ user, onNavigate }: Props) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
+                <DropdownMenuItem className="min-h-11" asChild>
+                    <Link href={editProfile()} onClick={onNavigate}>
+                        <UserRound />
+                        Profile settings
+                    </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem
                     className="min-h-11"
                     onSelect={() =>
@@ -52,6 +67,12 @@ export function UserMenuContent({ user, onNavigate }: Props) {
                     <Link href={editAppearance()} onClick={onNavigate}>
                         <Monitor />
                         Appearance settings
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-11" asChild>
+                    <Link href={reportProblem()} onClick={onNavigate}>
+                        <MessageSquareWarning />
+                        Report a problem
                     </Link>
                 </DropdownMenuItem>
             </DropdownMenuGroup>

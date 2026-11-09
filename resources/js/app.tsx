@@ -17,6 +17,8 @@ void createInertiaApp({
             case name === 'welcome':
             case name === 'not-found':
             case name === 'access-denied':
+            case name === 'email-updates/unsubscribe':
+            case name === 'email-updates/unsubscribed':
                 return null;
             case name.startsWith('auth/'):
                 return AuthLayout;

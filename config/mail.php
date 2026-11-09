@@ -16,6 +16,8 @@ return [
 
     'default' => env('MAIL_MAILER', 'log'),
 
+    'product_news_mailer' => env('PRODUCT_NEWS_MAILER'),
+
     /*
     |--------------------------------------------------------------------------
     | Mailer Configurations

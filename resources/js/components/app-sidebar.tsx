@@ -1,5 +1,12 @@
 import { Link, usePage } from '@inertiajs/react';
-import { House, UserRound, UsersRound, X } from 'lucide-react';
+import {
+    House,
+    MessageCircle,
+    Search,
+    UserRound,
+    UsersRound,
+    X,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -16,6 +23,8 @@ import {
 import { dashboard } from '@/routes';
 import { index as following } from '@/routes/following';
 import { show as profile } from '@/routes/members';
+import { index as people } from '@/routes/people';
+import { index as messages } from '@/routes/messages';
 import type { NavItem } from '@/types';
 
 export function AppSidebar() {
@@ -25,6 +34,8 @@ export function AppSidebar() {
         { title: 'Home', href: dashboard(), icon: House },
         { title: 'Profile', href: profile(auth.user.id), icon: UserRound },
         { title: 'Following', href: following(), icon: UsersRound },
+        { title: 'Messages', href: messages(), icon: MessageCircle },
+        { title: 'Find people', href: people(), icon: Search },
     ];
 
     return (
@@ -41,7 +52,6 @@ export function AppSidebar() {
                                 href={dashboard()}
                                 aria-label="Momento home"
                                 onClick={() => setOpenMobile(false)}
-                                prefetch
                             >
                                 <AppLogo />
                             </Link>
