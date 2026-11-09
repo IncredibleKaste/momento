@@ -59,7 +59,9 @@ type Props = {
 function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
     const { auth } = usePage().props;
     const log = useRef<HTMLDivElement>(null);
-    const renderedCount = useRef(0);
+    const renderedThreadId = useRef<number | null>(null);
+    const renderedLastMessageId = useRef<number | null>(null);
+    const wasNearBottom = useRef(true);
     const submitLock = useRef(false);
     const readLock = useRef(false);
     const pendingRead = useRef(0);
@@ -89,12 +91,18 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
     useEffect(() => {
         const root = log.current;
         if (!root) return;
-        const nearBottom =
-            root.scrollHeight - root.scrollTop - root.clientHeight < 100;
-        if (renderedCount.current === 0 || nearBottom) {
+        const lastMessageId = thread.messages.at(-1)?.id ?? null;
+        const isNewThread = renderedThreadId.current !== thread.id;
+        const hasNewMessage =
+            lastMessageId !== null &&
+            lastMessageId !== renderedLastMessageId.current;
+
+        if (isNewThread || (hasNewMessage && wasNearBottom.current)) {
             root.scrollTop = root.scrollHeight;
+            wasNearBottom.current = true;
         }
-        renderedCount.current = thread.messages.length;
+        renderedThreadId.current = thread.id;
+        renderedLastMessageId.current = lastMessageId;
     }, [thread.id, thread.messages.length, thread.messages.at(-1)?.id]);
 
     useEffect(() => {
@@ -239,6 +247,12 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
             </header>
             <div
                 ref={log}
+                onScroll={(event) => {
+                    const root = event.currentTarget;
+                    wasNearBottom.current =
+                        root.scrollHeight - root.scrollTop - root.clientHeight <
+                        100;
+                }}
                 className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4"
                 aria-live="polite"
                 aria-relevant="additions text"
