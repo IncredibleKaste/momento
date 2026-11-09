@@ -203,7 +203,14 @@ function webpChunkTypes(string $webp): array
 /** @param array{exit: int, stdout: string, stderr: string} $result */
 function inspectOutput(string $stage, array $result, int $width, int $height, bool $alpha, bool $orientationCanary): void
 {
-    requireProbe($result['exit'] === 0, $stage.'-exit');
+    if ($result['exit'] !== 0) {
+        $failure = match ($result['stderr']) {
+            "Invalid image.\n" => 'Invalid image.',
+            "Image processing failed.\n" => 'Image processing failed.',
+            default => 'unexpected',
+        };
+        throw new PhotoProbeFailure($stage.'-exit-'.$result['exit'].'-'.$failure);
+    }
     requireProbe($result['stderr'] === '', $stage.'-stderr');
     requireProbe($result['stdout'] !== '' && strlen($result['stdout']) <= MAX_OUTPUT_BYTES, $stage.'-size');
     $chunks = webpChunkTypes($result['stdout']);
