@@ -126,7 +126,11 @@ function PhotoPostPage({ photoPost, limits, detail }: Props) {
     }
 
     function requestDelete() {
-        if (deleteRequestInFlight.current || photoPost.status !== 'ready')
+        if (
+            deleteRequestInFlight.current ||
+            !photoPost.canDelete ||
+            photoPost.status !== 'ready'
+        )
             return;
 
         const confirmed = window.confirm(
@@ -257,7 +261,7 @@ function PhotoPostPage({ photoPost, limits, detail }: Props) {
                     </div>
                 )}
 
-                {photoPost.status === 'ready' && (
+                {photoPost.canDelete && photoPost.status === 'ready' && (
                     <div className="space-y-2">
                         {deleteError && (
                             <p

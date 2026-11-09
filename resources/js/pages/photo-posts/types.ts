@@ -19,6 +19,7 @@ export type PhotoPost = {
     status: PhotoPostStatus;
     caption: string | null;
     mediaUrl: string | null;
+    canDelete: boolean;
     canCancel: boolean;
     canRetry: boolean;
     retryKey: string | null;

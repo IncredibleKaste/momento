@@ -2,9 +2,12 @@
 
 use App\Actions\ManagePhotoPosts;
 use App\Enums\PhotoPostStatus;
+use App\Http\Middleware\HandleInertiaRequests;
+use App\Models\Follow;
 use App\Models\PhotoPost;
 use App\Models\User;
 use App\Services\PhotoAccess;
+use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Concurrency;
 use Illuminate\Support\Facades\DB;
@@ -77,6 +80,28 @@ it('denies another account and keeps the ready post untouched', function () {
         ->and($post->fresh()->caption)->toBe('A private caption')
         ->and($post->fresh()->processed_bytes_charged)->toBe(30);
     $disk->assertExists($post->output_key);
+});
+
+it('projects delete permission only to the owner of a ready post', function () {
+    $owner = User::factory()->create();
+    $follower = User::factory()->create();
+    Follow::factory()->approved()->create([
+        'follower_id' => $follower->id,
+        'followed_id' => $owner->id,
+    ]);
+    $post = readyPhotoPost($owner);
+    $version = app(HandleInertiaRequests::class)->version(Request::create('/'));
+    $headers = ['X-Inertia' => 'true', 'X-Inertia-Version' => $version ?? ''];
+
+    $this->actingAs($owner)->withHeaders($headers)->get(route('photo-posts.show', $post))
+        ->assertOk()
+        ->assertJsonPath('props.photoPost.canDelete', true);
+    $this->actingAs($follower)->withHeaders($headers)->get(route('photo-posts.show', $post))
+        ->assertOk()
+        ->assertJsonPath('props.photoPost.canDelete', false);
+    $this->delete(route('photo-posts.destroy', $post))->assertNotFound();
+
+    expect($post->fresh()->status)->toBe(PhotoPostStatus::Ready);
 });
 
 it('does not resurrect a deleted operation on replay and gives repeat deletion a truthful result', function () {
