@@ -344,21 +344,21 @@
     border-radius: 50%;
 }
 
-.home-feed .feed-post {
+.photo-post-card {
     overflow: hidden;
     border: 1px solid var(--border);
     border-bottom: 0;
     border-radius: 6px;
 }
 
-.home-feed .feed-post-header {
+.photo-post-card .feed-post-header {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 10px 16px;
 }
 
-.home-feed .feed-author {
+.photo-post-card .feed-author {
     display: inline-flex;
     align-items: center;
     gap: 10px;
@@ -369,7 +369,7 @@
     overflow-wrap: anywhere;
 }
 
-.home-feed .feed-post-time {
+.photo-post-card .feed-post-time {
     flex-shrink: 0;
     margin-left: auto;
     color: var(--muted-foreground);
@@ -377,7 +377,7 @@
     text-align: right;
 }
 
-.home-feed .feed-photo {
+.photo-post-card .feed-photo {
     display: block;
     width: 100%;
     height: auto;
@@ -386,17 +386,17 @@
     background: var(--card);
 }
 
-.home-feed .feed-post-bottom {
+.photo-post-card .feed-post-bottom {
     padding: 8px 16px 16px;
 }
 
-.home-feed .feed-post-actions {
+.photo-post-card .feed-post-actions {
     display: flex;
     align-items: flex-start;
     gap: 5px;
 }
 
-.home-feed .feed-comments {
+.photo-post-card .feed-comments {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -407,7 +407,7 @@
     font-size: 12px;
 }
 
-.home-feed .feed-caption {
+.photo-post-card .feed-caption {
     padding-top: 7px;
     font-size: 13px;
     line-height: 1.75;
@@ -415,22 +415,23 @@
     white-space: pre-wrap;
 }
 
-.home-feed .feed-post-end {
+.photo-post-card .feed-post-end {
     height: 1px;
     opacity: 0.65;
 }
 
-.home-feed a:focus-visible {
+.home-feed a:focus-visible,
+.photo-post-card a:focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: -2px;
 }
 
 @media (hover: hover) and (pointer: fine) {
-    .home-feed .feed-comments:hover {
+    .photo-post-card .feed-comments:hover {
         background: var(--accent);
     }
 
-    .home-feed .feed-author:hover {
+    .photo-post-card .feed-author:hover {
         text-decoration: underline;
         text-underline-offset: 3px;
     }
@@ -450,16 +451,16 @@
         height: 58px;
     }
 
-    .home-feed .feed-post-header {
+    .photo-post-card .feed-post-header {
         gap: 7px;
         padding: 7px 9px;
     }
 
-    .home-feed .feed-post-bottom {
+    .photo-post-card .feed-post-bottom {
         padding: 8px 10px 12px;
     }
 
-    .home-feed .feed-caption {
+    .photo-post-card .feed-caption {
         font-size: 12px;
     }
 }

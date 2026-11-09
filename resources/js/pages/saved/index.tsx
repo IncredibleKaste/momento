@@ -1,11 +1,11 @@
 import { Head, Link } from '@inertiajs/react';
-import BookmarkButton from '@/components/bookmark-button';
+import PhotoPostCard, {
+    type PhotoCardPost,
+} from '@/components/photo-post-card';
 import { Button } from '@/components/ui/button';
+import { dashboard } from '@/routes';
 
-type SavedPost = {
-    id: number;
-    caption: string | null;
-    author: { id: number; name: string };
+type SavedPost = Omit<PhotoCardPost, 'saveState'> & {
     revision: number;
 };
 
@@ -24,12 +24,10 @@ export default function Saved({ savedPosts, error }: Props) {
     return (
         <>
             <Head title="Saved" />
-            <div className="mx-auto max-w-3xl space-y-8 py-10">
+            <div className="min-w-0 space-y-5 pb-5">
                 <header className="space-y-2">
-                    <h1 className="font-serif text-4xl tracking-tight sm:text-5xl">
-                        Saved
-                    </h1>
-                    <p className="max-w-lg text-base leading-relaxed text-muted-foreground">
+                    <h1 className="font-serif text-xl">Saved moments</h1>
+                    <p className="text-xs text-muted-foreground">
                         Photos you saved, newest first.
                     </p>
                 </header>
@@ -41,36 +39,37 @@ export default function Saved({ savedPosts, error }: Props) {
                 )}
 
                 {savedPosts.data.length === 0 ? (
-                    <p className="border border-border bg-card px-5 py-8 text-sm text-muted-foreground sm:px-7">
-                        You have no saved photos yet.
-                    </p>
+                    <section className="space-y-3 border border-border bg-card px-5 py-8 sm:px-7">
+                        <h2 className="font-serif text-2xl">
+                            {savedPosts.prev_page_url
+                                ? 'No saved photos on this page.'
+                                : 'Keep something close.'}
+                        </h2>
+                        <p className="text-sm text-muted-foreground">
+                            {savedPosts.prev_page_url
+                                ? 'Use Previous to check earlier pages.'
+                                : 'Save a photo from your feed to find it here.'}
+                        </p>
+                        <Link
+                            href={dashboard()}
+                            prefetch={false}
+                            className="inline-flex min-h-11 items-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        >
+                            Back to your feed
+                        </Link>
+                    </section>
                 ) : (
-                    <ul aria-label="Saved photos" className="space-y-4">
+                    <ul aria-label="Saved photos" className="space-y-7">
                         {savedPosts.data.map((post) => (
-                            <li
-                                key={post.id}
-                                className="flex min-w-0 items-start justify-between gap-3 border-b border-border/80 pb-4"
-                            >
-                                <div className="min-w-0 space-y-2">
-                                    <p className="text-sm text-muted-foreground">
-                                        {post.author.name}
-                                    </p>
-                                    {post.caption && (
-                                        <p className="break-words whitespace-pre-wrap">
-                                            {post.caption}
-                                        </p>
-                                    )}
-                                    <Link
-                                        href={`/photo-posts/${post.id}`}
-                                        className="inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                                    >
-                                        Open photo
-                                    </Link>
-                                </div>
-                                <BookmarkButton
-                                    postId={post.id}
-                                    saved
-                                    revision={post.revision}
+                            <li key={post.id} className="min-w-0">
+                                <PhotoPostCard
+                                    post={{
+                                        ...post,
+                                        saveState: {
+                                            saved: true,
+                                            revision: post.revision,
+                                        },
+                                    }}
                                 />
                             </li>
                         ))}
@@ -78,7 +77,10 @@ export default function Saved({ savedPosts, error }: Props) {
                 )}
 
                 {(savedPosts.prev_page_url || savedPosts.next_page_url) && (
-                    <nav aria-label="Saved pages" className="flex gap-3">
+                    <nav
+                        aria-label="Saved pages"
+                        className="flex flex-wrap gap-3"
+                    >
                         {savedPosts.prev_page_url && (
                             <Button
                                 asChild
@@ -87,6 +89,7 @@ export default function Saved({ savedPosts, error }: Props) {
                             >
                                 <Link
                                     href={savedPosts.prev_page_url}
+                                    prefetch={false}
                                     preserveScroll
                                 >
                                     Previous
@@ -101,6 +104,7 @@ export default function Saved({ savedPosts, error }: Props) {
                             >
                                 <Link
                                     href={savedPosts.next_page_url}
+                                    prefetch={false}
                                     preserveScroll
                                 >
                                     Next
