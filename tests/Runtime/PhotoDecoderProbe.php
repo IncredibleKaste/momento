@@ -9,10 +9,12 @@ const SRGB_PROFILE_SHA256 = '384b832de3412066743b52a75ee906b6fb9fb8d9e09e936fc2c
 const MAX_INPUT_BYTES = 20000000;
 const MAX_OUTPUT_BYTES = 20000000;
 
+final class PhotoProbeFailure extends RuntimeException {}
+
 function requireProbe(bool $condition, string $stage): void
 {
     if (! $condition) {
-        throw new RuntimeException($stage);
+        throw new PhotoProbeFailure($stage);
     }
 }
 
@@ -283,8 +285,9 @@ try {
     verifyDedicatedPolicy($temporaryPath);
     requireProbe(unlink($temporaryPath), 'policy-fixture-cleanup');
 
-    $stage = 'jpeg-orientation-icc';
+    $stage = 'jpeg-fixture-generation';
     $jpeg = makeImageBlob('JPEG', 64, 32, false, true, true);
+    $stage = 'jpeg-fixture-verification';
     $original = new Imagick;
     try {
         $original->readImageBlob($jpeg);
@@ -295,6 +298,7 @@ try {
     } finally {
         $original->clear();
     }
+    $stage = 'jpeg-orientation-icc';
     inspectOutput($stage, invokeDecoder($jpeg), 32, 64, false, true);
 
     $stage = 'png-alpha';
@@ -349,7 +353,8 @@ try {
 
     echo "Standalone photo decoder generated-input probe passed.\n";
 } catch (Throwable $exception) {
-    fwrite(STDERR, 'Standalone photo decoder probe failed: '.$stage.".\n");
+    $failure = $exception instanceof PhotoProbeFailure ? $exception->getMessage() : $stage;
+    fwrite(STDERR, 'Standalone photo decoder probe failed: '.$failure.".\n");
     exit(1);
 } finally {
     if (is_file($temporaryPath) && ! is_link($temporaryPath)) {

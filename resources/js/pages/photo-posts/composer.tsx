@@ -235,8 +235,7 @@ export default function PhotoPostComposer({
                             {formatBytes(limits.maxInputBytes)} and{' '}
                             {(limits.maxPixels / 1_000_000).toLocaleString()}{' '}
                             megapixels. Image dimensions are checked after
-                            upload. A preview is not used to decide whether a
-                            photo can be processed.
+                            upload.
                         </p>
                         {form.data.photo && (
                             <p className="flex items-center gap-2 text-sm text-muted-foreground">

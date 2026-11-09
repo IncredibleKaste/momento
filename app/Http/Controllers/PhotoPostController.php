@@ -33,7 +33,7 @@ class PhotoPostController
     {
         $validated = $request->validate([
             'photo' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,heic,heif'],
-            'caption' => ['nullable', 'string', 'max:1000'],
+            'caption' => ['nullable', 'string', 'max:1000', 'not_regex:/\x00/'],
             'idempotency_key' => ['required', 'uuid'],
         ]);
         $photo = $validated['photo'];

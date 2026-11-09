@@ -343,6 +343,25 @@ it('fails closed when no fixed decoder launcher is configured', function () {
     expect(PhotoPost::count())->toBe(0);
 });
 
+it('rejects NUL in captions before admission while preserving ordinary newlines', function () {
+    $owner = User::factory()->create();
+    $invalid = photoPostUpload("before\0after");
+    $invalid['idempotency_key'] = (string) Str::uuid();
+
+    $this->actingAs($owner)->post(route('photo-posts.store'), $invalid)->assertSessionHasErrors(['caption']);
+    expect(PhotoPost::count())->toBe(0)
+        ->and(PhotoPost::sum('staging_bytes_charged'))->toBe(0)
+        ->and(PhotoPost::sum('processed_bytes_charged'))->toBe(0)
+        ->and(Storage::disk('photo_posts')->allFiles())->toBe([]);
+
+    $caption = "line one\nline two";
+    $valid = photoPostUpload($caption);
+    $valid['idempotency_key'] = (string) Str::uuid();
+    $this->post(route('photo-posts.store'), $valid)->assertRedirect();
+
+    expect(PhotoPost::sole()->caption)->toBe($caption);
+});
+
 it('projects an owner retry key only when cleanup and decoder conditions are satisfied', function () {
     $owner = User::factory()->create();
     $post = PhotoPost::factory()->for($owner)->create([

@@ -26,6 +26,42 @@ const statusCopy: Record<PhotoPost['status'], string> = {
     cancelled: 'This post was cancelled.',
 };
 
+function ReadyPhotoImage({ src, alt }: { src: string; alt: string }) {
+    const [attempt, setAttempt] = useState(0);
+    const [failedAttempt, setFailedAttempt] = useState<number | null>(null);
+
+    if (failedAttempt === attempt) {
+        return (
+            <div
+                role="status"
+                className="flex min-h-48 flex-col items-center justify-center gap-3 bg-muted p-6 text-center"
+            >
+                <p className="text-sm text-muted-foreground">
+                    This photo could not be loaded.
+                </p>
+                <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11"
+                    onClick={() => setAttempt((current) => current + 1)}
+                >
+                    Retry loading photo
+                </Button>
+            </div>
+        );
+    }
+
+    return (
+        <img
+            key={attempt}
+            src={src}
+            alt={alt}
+            className="max-h-[70vh] w-full bg-muted object-contain"
+            onError={() => setFailedAttempt(attempt)}
+        />
+    );
+}
+
 export default function ShowPhotoPost({ photoPost, limits }: Props) {
     const [canceling, setCanceling] = useState(false);
     const [cancelError, setCancelError] = useState(false);
@@ -100,10 +136,13 @@ export default function ShowPhotoPost({ photoPost, limits }: Props) {
 
                 {photoPost.status === 'ready' && photoPost.mediaUrl && (
                     <article className="overflow-hidden rounded-lg border border-border bg-card">
-                        <img
+                        <ReadyPhotoImage
+                            key={JSON.stringify([
+                                photoPost.id,
+                                photoPost.mediaUrl,
+                            ])}
                             src={photoPost.mediaUrl}
                             alt={photoPost.caption || 'Shared photo'}
-                            className="max-h-[70vh] w-full bg-muted object-contain"
                         />
                         {photoPost.caption && (
                             <p className="p-4 break-words whitespace-pre-wrap">
@@ -114,13 +153,24 @@ export default function ShowPhotoPost({ photoPost, limits }: Props) {
                 )}
 
                 {photoPost.status === 'ready' && !photoPost.mediaUrl && (
-                    <p
+                    <div
                         role="status"
-                        className="rounded-md border border-border bg-card p-4 text-sm"
+                        className="space-y-3 rounded-md border border-border bg-card p-4 text-sm"
                     >
-                        This photo is ready, but it could not be loaded. Refresh
-                        the page to try again.
-                    </p>
+                        <p>
+                            This photo is ready, but its image is unavailable.
+                        </p>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="min-h-11"
+                            onClick={() =>
+                                router.reload({ only: ['photoPost'] })
+                            }
+                        >
+                            Refresh photo
+                        </Button>
+                    </div>
                 )}
 
                 {photoPost.status === 'failed' && (
