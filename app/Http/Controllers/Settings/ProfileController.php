@@ -30,12 +30,7 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $attributes = $request->validated();
-        if (blank($request->user()->getAuthPassword())) {
-            unset($attributes['email']);
-        }
-
-        $request->user()->fill($attributes);
+        $request->user()->fill($request->validated());
 
         if ($request->user()->isDirty('email')) {
             $request->user()->email_verified_at = null;
