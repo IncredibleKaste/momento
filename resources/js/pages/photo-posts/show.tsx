@@ -1,7 +1,7 @@
 import { Head, Link, router, usePoll } from '@inertiajs/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { create, cancel } from '@/routes/photo-posts';
+import { create, cancel, destroy } from '@/routes/photo-posts';
 import PhotoPostComposer from './composer';
 import {
     canRequestPhotoPostCancel,
@@ -65,6 +65,9 @@ function ReadyPhotoImage({ src, alt }: { src: string; alt: string }) {
 export default function ShowPhotoPost({ photoPost, limits }: Props) {
     const [canceling, setCanceling] = useState(false);
     const [cancelError, setCancelError] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+    const [deleteError, setDeleteError] = useState(false);
+    const deleteRequestInFlight = useRef(false);
     const isActive = isPhotoPostPolling(photoPost.status);
     const retryAvailable = canRetryPhotoPost(photoPost);
     const retryKey = retryAvailable ? photoPost.retryKey : null;
@@ -106,6 +109,32 @@ export default function ShowPhotoPost({ photoPost, limits }: Props) {
                 onFinish: () => setCanceling(false),
             },
         );
+    }
+
+    function requestDelete() {
+        if (deleteRequestInFlight.current || photoPost.status !== 'ready')
+            return;
+
+        const confirmed = window.confirm(
+            'Permanently delete this photo post? It will disappear immediately and cannot be restored. Stored media cleanup may take up to 24 hours.',
+        );
+
+        if (!confirmed) return;
+
+        deleteRequestInFlight.current = true;
+        setDeleteError(false);
+        setDeleting(true);
+
+        router.delete(destroy.url(photoPost.id), {
+            preserveScroll: true,
+            onError: () => setDeleteError(true),
+            onNetworkError: () => setDeleteError(true),
+            onHttpException: () => setDeleteError(true),
+            onFinish: () => {
+                deleteRequestInFlight.current = false;
+                setDeleting(false);
+            },
+        });
     }
 
     return (
@@ -169,6 +198,29 @@ export default function ShowPhotoPost({ photoPost, limits }: Props) {
                             }
                         >
                             Refresh photo
+                        </Button>
+                    </div>
+                )}
+
+                {photoPost.status === 'ready' && (
+                    <div className="space-y-2">
+                        {deleteError && (
+                            <p
+                                role="alert"
+                                className="text-sm text-destructive"
+                            >
+                                Deletion could not be confirmed. Refresh this
+                                page before trying again.
+                            </p>
+                        )}
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            className="min-h-11"
+                            disabled={deleting}
+                            onClick={requestDelete}
+                        >
+                            {deleting ? 'Deleting…' : 'Delete photo post'}
                         </Button>
                     </div>
                 )}

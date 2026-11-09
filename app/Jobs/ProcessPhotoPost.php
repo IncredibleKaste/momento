@@ -49,7 +49,8 @@ class ProcessPhotoPost implements ShouldQueue
     private function processUnderGuard(PhotoDecoder $decoder, WebpOutputInspector $inspector, ManagePhotoPosts $posts, array $guard): void
     {
         $post = PhotoPost::query()->find($this->photoPostId);
-        if ($post === null || $post->status === PhotoPostStatus::Ready || $post->status->isFailedOrCancelled()) {
+        if ($post === null || in_array($post->status, [PhotoPostStatus::Ready, PhotoPostStatus::Deleted], true)
+            || $post->status->isFailedOrCancelled()) {
             return;
         }
 

@@ -29,11 +29,12 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $cancel_requested_at
  * @property Carbon|null $cleanup_due_at
  * @property Carbon|null $cleanup_completed_at
+ * @property Carbon|null $deleted_at
  */
 #[Fillable([
     'user_id', 'idempotency_key', 'request_fingerprint', 'attempt_token', 'status', 'caption',
     'raw_key', 'output_key', 'input_bytes', 'staging_bytes_charged', 'processed_bytes_charged',
-    'failure_code', 'processing_started_at', 'cancel_requested_at', 'cleanup_due_at', 'cleanup_completed_at',
+    'failure_code', 'processing_started_at', 'cancel_requested_at', 'cleanup_due_at', 'cleanup_completed_at', 'deleted_at',
 ])]
 #[Visible(['id', 'user_id', 'status', 'caption', 'created_at', 'updated_at'])]
 class PhotoPost extends Model
@@ -59,6 +60,7 @@ class PhotoPost extends Model
             'cancel_requested_at' => 'immutable_datetime',
             'cleanup_due_at' => 'immutable_datetime',
             'cleanup_completed_at' => 'immutable_datetime',
+            'deleted_at' => 'immutable_datetime',
         ];
     }
 }

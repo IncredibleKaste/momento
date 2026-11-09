@@ -24,6 +24,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('photo-posts/create', [PhotoPostController::class, 'create'])->name('photo-posts.create');
     Route::post('photo-posts', [PhotoPostController::class, 'store'])->middleware('throttle:photo-posts')->name('photo-posts.store');
     Route::get('photo-posts/{photoPost}/media', [PhotoPostController::class, 'media'])->whereNumber('photoPost')->name('photo-posts.media');
+    Route::delete('photo-posts/{photoPost}', [PhotoPostController::class, 'destroy'])->whereNumber('photoPost')->name('photo-posts.destroy');
     Route::post('photo-posts/{photoPost}/cancel', [PhotoPostController::class, 'cancel'])->whereNumber('photoPost')->name('photo-posts.cancel');
     Route::get('photo-posts/{photoPost}', [PhotoPostController::class, 'show'])->whereNumber('photoPost')->name('photo-posts.show');
     Route::get('people', PeopleSearchController::class)->middleware('throttle:people-search')->name('people.index');

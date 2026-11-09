@@ -9,6 +9,7 @@ use App\Exceptions\PhotoDecoderException;
 use App\Models\PhotoPost;
 use App\Services\PhotoAccess;
 use App\Services\PhotoDecoder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -54,7 +55,8 @@ class PhotoPostController
         $viewer = $request->user();
         $owner = $viewer->is($photoPost->user);
         $isReady = $photoPost->status === PhotoPostStatus::Ready;
-        abort_unless($owner || ($isReady && app(PhotoAccess::class)->allows($viewer, $photoPost->user)), 404);
+        abort_unless($photoPost->status !== PhotoPostStatus::Deleted
+            && ($owner || ($isReady && app(PhotoAccess::class)->allows($viewer, $photoPost->user))), 404);
 
         $canCancel = $owner && $photoPost->status->isCancellable();
         $canRetry = $owner && $photoPost->status->isFailedOrCancelled()
@@ -115,10 +117,27 @@ class PhotoPostController
 
     public function cancel(Request $request, PhotoPost $photoPost, ManagePhotoPosts $posts): Response
     {
-        abort_unless($request->user()->is($photoPost->user), 404);
+        abort_unless($request->user()->is($photoPost->user)
+            && $photoPost->status !== PhotoPostStatus::Deleted, 404);
         $posts->cancel($request->user(), $photoPost);
 
         return to_route('photo-posts.show', $photoPost)->withHeaders(['Cache-Control' => 'private, no-store']);
+    }
+
+    public function destroy(Request $request, PhotoPost $photoPost, ManagePhotoPosts $posts): RedirectResponse
+    {
+        abort_unless($request->user()->is($photoPost->user)
+            && in_array($photoPost->status, [PhotoPostStatus::Ready, PhotoPostStatus::Deleted], true), 404);
+
+        $cleaned = $posts->delete($request->user(), $photoPost);
+        Inertia::flash('toast', [
+            'type' => $cleaned ? 'success' : 'warning',
+            'message' => $cleaned
+                ? 'Your photo post was deleted.'
+                : 'Your photo post was removed. Photo cleanup will retry.',
+        ]);
+
+        return to_route('dashboard');
     }
 
     /** @return array{maxInputBytes: int, maxPixels: int, maxCaptionCharacters: int, accept: list<string>} */

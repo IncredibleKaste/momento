@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\PhotoDecoder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -48,6 +49,9 @@ class ManagePhotoPosts
                 ->where('idempotency_key', $idempotencyKey)->lockForUpdate()->first();
 
             if ($existing !== null) {
+                if ($existing->status === PhotoPostStatus::Deleted) {
+                    throw new HttpException(409, 'This photo post was removed. Start a new post with a new upload key.');
+                }
                 if (! hash_equals($existing->request_fingerprint, $fingerprint)) {
                     throw new HttpException(409, 'This retry key belongs to different photo or caption content.');
                 }
@@ -205,6 +209,140 @@ class ManagePhotoPosts
         }, attempts: 3);
     }
 
+    public function delete(User $owner, PhotoPost $post): bool
+    {
+        $current = DB::transaction(function () use ($owner, $post): PhotoPost {
+            DB::table('photo_upload_capacity')->where('id', 1)->lockForUpdate()->first();
+            $lockedOwner = User::query()->lockForUpdate()->findOrFail($owner->id);
+            $current = PhotoPost::query()->where('user_id', $lockedOwner->id)->lockForUpdate()->findOrFail($post->id);
+
+            if ($current->status === PhotoPostStatus::Deleted) {
+                return $current;
+            }
+            if ($current->status !== PhotoPostStatus::Ready) {
+                abort(404);
+            }
+
+            $current->update([
+                'status' => PhotoPostStatus::Deleted,
+                'caption' => null,
+                'request_fingerprint' => str_repeat('0', 64),
+                'deleted_at' => now(),
+                'cleanup_due_at' => now(),
+                'cleanup_completed_at' => null,
+            ]);
+
+            return $current->fresh();
+        }, attempts: 3);
+
+        if ($current->cleanup_completed_at !== null) {
+            return true;
+        }
+
+        return $this->cleanupDeletedPost($current->id, $current->attempt_token);
+    }
+
+    private function cleanupDeletedPost(int $postId, string $attemptToken): bool
+    {
+        $guard = $this->acquireOperationGuard($postId);
+        if ($guard === null) {
+            return false;
+        }
+
+        try {
+            $post = PhotoPost::query()->find($postId);
+            if ($post === null || $post->attempt_token !== $attemptToken
+                || $post->status !== PhotoPostStatus::Deleted) {
+                return false;
+            }
+            if ($post->cleanup_completed_at !== null) {
+                return true;
+            }
+
+            $clean = $this->deleteArtifacts($post);
+            if (! $clean) {
+                DB::transaction(function () use ($postId, $attemptToken): void {
+                    DB::table('photo_upload_capacity')->where('id', 1)->lockForUpdate()->first();
+                    $current = PhotoPost::query()->lockForUpdate()->find($postId);
+                    if ($current !== null && $current->attempt_token === $attemptToken
+                        && $current->status === PhotoPostStatus::Deleted
+                        && $current->cleanup_completed_at === null) {
+                        $this->reportOverdueDeletion($current);
+                        $current->update(['cleanup_due_at' => $this->nextCleanupDue($current)]);
+                    }
+                }, attempts: 3);
+
+                return false;
+            }
+
+            return DB::transaction(function () use ($postId, $attemptToken): bool {
+                DB::table('photo_upload_capacity')->where('id', 1)->lockForUpdate()->first();
+                $current = PhotoPost::query()->lockForUpdate()->find($postId);
+                if ($current === null || $current->attempt_token !== $attemptToken
+                    || $current->status !== PhotoPostStatus::Deleted) {
+                    return false;
+                }
+                if ($current->cleanup_completed_at !== null) {
+                    return true;
+                }
+
+                $current->update([
+                    'processed_bytes_charged' => 0,
+                    'cleanup_due_at' => null,
+                    'cleanup_completed_at' => now(),
+                ]);
+
+                return true;
+            }, attempts: 3);
+        } finally {
+            $this->releaseOperationGuard($guard);
+        }
+    }
+
+    private function deleteArtifacts(PhotoPost $post): bool
+    {
+        $disk = Storage::disk('photo_posts');
+        $clean = true;
+        foreach ([$post->raw_key, $post->output_key] as $key) {
+            try {
+                if ($disk->exists($key) && ! $disk->delete($key)) {
+                    $clean = false;
+                }
+                if ($disk->exists($key)) {
+                    $clean = false;
+                }
+            } catch (\Throwable) {
+                $clean = false;
+            }
+        }
+
+        return $clean;
+    }
+
+    private function reportOverdueDeletion(PhotoPost $post): void
+    {
+        if ($post->deleted_at !== null && $post->cleanup_due_at !== null
+            && $post->deleted_at <= now()->subDay()
+            && $post->cleanup_due_at <= $post->deleted_at->addDay()) {
+            Log::warning('Photo post media cleanup is past the 24-hour deletion deadline.', [
+                'photo_post_id' => $post->id,
+            ]);
+        }
+    }
+
+    private function nextCleanupDue(PhotoPost $post): \DateTimeInterface
+    {
+        $retryAt = now()->addMinute();
+        if ($post->status === PhotoPostStatus::Deleted && $post->deleted_at !== null) {
+            $deadline = $post->deleted_at->addDay();
+            if ($deadline > now() && $retryAt > $deadline) {
+                return $deadline;
+            }
+        }
+
+        return $retryAt;
+    }
+
     /** @param array{resource, string}|null $guard */
     public function finishFailure(int $postId, string $attemptToken, PhotoPostFailure $failure, ?array $guard = null): void
     {
@@ -216,29 +354,18 @@ class ManagePhotoPosts
 
         try {
             $post = PhotoPost::query()->find($postId);
-            if ($post === null || $post->attempt_token !== $attemptToken || $post->status === PhotoPostStatus::Ready) {
+            if ($post === null || $post->attempt_token !== $attemptToken
+                || in_array($post->status, [PhotoPostStatus::Ready, PhotoPostStatus::Deleted], true)) {
                 return;
             }
 
-            $disk = Storage::disk('photo_posts');
-            $clean = true;
-            foreach ([$post->raw_key, $post->output_key] as $key) {
-                try {
-                    if ($disk->exists($key) && ! $disk->delete($key)) {
-                        $clean = false;
-                    }
-                    if ($disk->exists($key)) {
-                        $clean = false;
-                    }
-                } catch (\Throwable) {
-                    $clean = false;
-                }
-            }
+            $clean = $this->deleteArtifacts($post);
 
             DB::transaction(function () use ($postId, $attemptToken, $failure, $clean): void {
                 DB::table('photo_upload_capacity')->where('id', 1)->lockForUpdate()->first();
                 $post = PhotoPost::query()->lockForUpdate()->find($postId);
-                if ($post === null || $post->attempt_token !== $attemptToken || $post->status === PhotoPostStatus::Ready) {
+                if ($post === null || $post->attempt_token !== $attemptToken
+                    || in_array($post->status, [PhotoPostStatus::Ready, PhotoPostStatus::Deleted], true)) {
                     return;
                 }
                 $cancelled = $post->status === PhotoPostStatus::CancelRequested;
@@ -264,7 +391,7 @@ class ManagePhotoPosts
         $staleProcessing = now()->subSeconds(config('photo_processing.processing_recovery_after_seconds'));
         $posts = PhotoPost::query()->where(function ($query) use ($staleStage, $staleProcessing): void {
             $query->where(function ($query): void {
-                $query->whereIn('status', ['failed', 'cancelled'])->whereNotNull('cleanup_due_at')->where('cleanup_due_at', '<=', now());
+                $query->whereIn('status', ['failed', 'cancelled', 'deleted'])->whereNotNull('cleanup_due_at')->where('cleanup_due_at', '<=', now());
             })->orWhere(function ($query) use ($staleStage): void {
                 $query->where(function ($query): void {
                     $query->where('status', PhotoPostStatus::Staging)
@@ -280,7 +407,6 @@ class ManagePhotoPosts
             });
         })->orderBy('id')->limit(100)->get();
         $cleaned = 0;
-        $disk = Storage::disk('photo_posts');
 
         foreach ($posts as $post) {
             $guard = $this->acquireOperationGuard($post->id);
@@ -295,22 +421,11 @@ class ManagePhotoPosts
                     continue;
                 }
 
-                $clean = true;
-                foreach ([$current->raw_key, $current->output_key] as $key) {
-                    try {
-                        if ($disk->exists($key) && ! $disk->delete($key)) {
-                            $clean = false;
-                        }
-                        if ($disk->exists($key)) {
-                            $clean = false;
-                        }
-                    } catch (\Throwable) {
-                        $clean = false;
-                    }
-                }
+                $clean = $this->deleteArtifacts($current);
                 if (! $clean) {
+                    $this->reportOverdueDeletion($current);
                     PhotoPost::query()->whereKey($current->id)->where('attempt_token', $current->attempt_token)
-                        ->update(['cleanup_due_at' => now()->addMinute()]);
+                        ->update(['cleanup_due_at' => $this->nextCleanupDue($current)]);
 
                     continue;
                 }
@@ -382,6 +497,8 @@ class ManagePhotoPosts
     private function needsCleanup(PhotoPost $post, \DateTimeInterface $staleStage, \DateTimeInterface $staleProcessing): bool
     {
         return ($post->status->isFailedOrCancelled() && $post->cleanup_completed_at === null
+                && $post->cleanup_due_at !== null && $post->cleanup_due_at <= now())
+            || ($post->status === PhotoPostStatus::Deleted && $post->cleanup_completed_at === null
                 && $post->cleanup_due_at !== null && $post->cleanup_due_at <= now())
             || (in_array($post->status, [PhotoPostStatus::Staging, PhotoPostStatus::CancelRequested], true)
                 && $post->processing_started_at === null && $post->created_at !== null && $post->created_at <= $staleStage)
