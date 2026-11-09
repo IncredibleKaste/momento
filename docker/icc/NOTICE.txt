@@ -1,0 +1,14 @@
+ICC sRGB v2 output profile
+
+File: sRGB2014.icc
+Source: https://registry.color.org/rgb-registry/profiles/sRGB2014.icc
+Registry entry: https://registry.color.org/rgb-registry/srgbprofiles
+Profile: ICC v2 sRGB profile, revised February 2015.
+SHA-256: 384b832de3412066743b52a75ee906b6fb9fb8d9e09e936fc2c43223815c6e0a
+
+The International Color Consortium's general profile terms permit this
+profile to be copied, distributed, embedded, made, used, and sold without
+restriction, provided the original identification and copyright information
+remain intact and the profile is not misrepresented as the original if altered.
+This copy is distributed unmodified. See https://www.color.org/faqs/ and
+https://registry.color.org/profile-library/ for the ICC terms.
