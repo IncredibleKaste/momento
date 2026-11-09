@@ -58,6 +58,7 @@ class PhotoPostController
         abort_unless($photoPost->status !== PhotoPostStatus::Deleted
             && ($owner || ($isReady && app(PhotoAccess::class)->allows($viewer, $photoPost->user))), 404);
 
+        $canDelete = $owner && $isReady;
         $canCancel = $owner && $photoPost->status->isCancellable();
         $canRetry = $owner && $photoPost->status->isFailedOrCancelled()
             && $photoPost->cleanup_completed_at !== null
@@ -78,6 +79,7 @@ class PhotoPostController
                 'status' => $photoPost->status->value,
                 'caption' => $photoPost->caption,
                 'mediaUrl' => $isReady ? route('photo-posts.media', $photoPost) : null,
+                'canDelete' => $canDelete,
                 'canCancel' => $canCancel,
                 'canRetry' => $canRetry,
                 'retryKey' => $canRetry ? $photoPost->idempotency_key : null,

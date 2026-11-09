@@ -25,6 +25,7 @@ function photoPost(overrides: Partial<PhotoPost> = {}): PhotoPost {
         status: 'queued',
         caption: null,
         mediaUrl: null,
+        canDelete: false,
         canCancel: false,
         canRetry: false,
         retryKey: null,
