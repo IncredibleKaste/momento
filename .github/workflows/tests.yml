@@ -102,6 +102,21 @@ jobs:
           MOMENTO_CONVERSATION_CONCURRENCY: '1'
         run: php artisan test --compact tests/Feature/FollowTest.php tests/Feature/FollowConcurrencyTest.php tests/Feature/MemberProfileTest.php tests/Feature/DashboardFollowedStripTest.php tests/Feature/PeopleSearchTest.php tests/Feature/ConversationTest.php tests/Feature/ConversationConcurrencyTest.php
 
+      - name: Check photo comments with PostgreSQL
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: momento_test
+          DB_USERNAME: momento_test
+          DB_PASSWORD: ci-only-password
+          CACHE_STORE: array
+          MOMENTO_PHOTO_COMMENT_CONCURRENCY: '1'
+        run: |
+          php artisan test --compact \
+            tests/Feature/PhotoCommentsTest.php \
+            tests/Feature/PhotoCommentConcurrencyTest.php
+
       - name: Check two-factor concurrency with PostgreSQL and Redis
         env:
           APP_ENV: testing
