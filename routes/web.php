@@ -45,6 +45,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 require __DIR__.'/settings.php';
 require __DIR__.'/photo-likes.php';
+require __DIR__.'/photo-saves.php';
 
 Route::fallback(function (Request $request): Response {
     if ($request->expectsJson()) {

@@ -131,6 +131,18 @@ jobs:
           MOMENTO_PHOTO_LIKE_CONCURRENCY: '1'
         run: php artisan test --compact tests/Feature/PhotoLikeTest.php
 
+      - name: Check private photo saves with PostgreSQL
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: momento_test
+          DB_USERNAME: momento_test
+          DB_PASSWORD: ci-only-password
+          CACHE_STORE: array
+          MOMENTO_PHOTO_SAVE_CONCURRENCY: '1'
+        run: php artisan test --compact tests/Feature/PhotoSaveTest.php
+
       - name: Check two-factor concurrency with PostgreSQL and Redis
         env:
           APP_ENV: testing
