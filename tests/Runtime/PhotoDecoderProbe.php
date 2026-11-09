@@ -243,7 +243,7 @@ function inspectOutput(string $stage, array $result, int $width, int $height, bo
     }
 }
 
-function verifyDedicatedPolicy(string $generatedImagePath): void
+function verifyDedicatedPolicy(string $generatedImagePath, string $jpeg): void
 {
     $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" fill="red"/></svg>';
     $script = 'error_reporting(0); ini_set("display_errors", "0"); '
@@ -259,6 +259,14 @@ function verifyDedicatedPolicy(string $generatedImagePath): void
         .'Imagick::RESOURCETYPE_WIDTH => 50000, Imagick::RESOURCETYPE_HEIGHT => 50000]; '
         .'foreach ($limits as $resource => $limit) { if (Imagick::getResourceLimit($resource) > $limit) { exit(30); } '
         .'Imagick::setResourceLimit($resource, $limit + 1); if (Imagick::getResourceLimit($resource) > $limit) { exit(31); } } '
+        .'$jpeg = base64_decode('.var_export(base64_encode($jpeg), true).'); '
+        .'$allowed = new Imagick; $stage = 40; try { '
+        .'$allowed->pingImageBlob($jpeg); '
+        .'if ($allowed->getImageFormat() !== "JPEG" || $allowed->getNumberImages() !== 1) { exit(46); } '
+        .'$stage = 42; $allowed = new Imagick; $allowed->readImageBlob($jpeg); '
+        .'$stage = 44; $allowed->autoOrient(); '
+        .'} catch (ImagickException $exception) { '
+        .'exit($stage + (stripos($exception->getMessage(), "security policy") === false ? 1 : 0)); } '
         .'echo "policy-ok";';
 
     $process = proc_open([PHP_BINARY, '-r', $script], [
@@ -276,7 +284,7 @@ function verifyDedicatedPolicy(string $generatedImagePath): void
     fclose($pipes[2]);
     $exit = proc_close($process);
 
-    requireProbe($exit === 0 && $stdout === 'policy-ok' && $stderr === '', 'policy-effective');
+    requireProbe($exit === 0 && $stdout === 'policy-ok' && $stderr === '', 'policy-effective-exit-'.$exit);
 }
 
 $stage = 'setup';
@@ -289,7 +297,7 @@ try {
     $stage = 'policy';
     $policyFixture = makeImageBlob('PNG', 4, 4);
     requireProbe(file_put_contents($temporaryPath, $policyFixture) === strlen($policyFixture), 'policy-fixture');
-    verifyDedicatedPolicy($temporaryPath);
+    verifyDedicatedPolicy($temporaryPath, makeImageBlob('JPEG', 64, 32, false, true, true));
     requireProbe(unlink($temporaryPath), 'policy-fixture-cleanup');
 
     $stage = 'jpeg-fixture-generation';
