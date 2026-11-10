@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
 require '/app/vendor/autoload.php';
@@ -9,6 +10,7 @@ const FFMPEG_BIN = '/usr/bin/ffmpeg';
 const FFPROBE_BIN = '/usr/bin/ffprobe';
 const VIDEO_DECODER = '/usr/local/bin/conversation-video-decoder';
 
+$probeStartedAt = hrtime(true);
 $temporaryDirectory = sys_get_temp_dir().'/momento-video-probe-'.bin2hex(random_bytes(8));
 if (! mkdir($temporaryDirectory, 0700)) {
     throw new RuntimeException('Could not create the temporary probe directory.');
@@ -33,7 +35,7 @@ try {
     createFixture($ordinary, 3, false, true, metadataCanary: true);
     ensure(moovIsAtEnd($ordinary), 'Ordinary fixture did not put moov at the end.');
     ensure(in_array('H.26[45] User Data Unregistered SEI message', frameSideDataTypes($ordinary), true), 'Ordinary H.264 fixture lacks its benign x264 encoder-info SEI.');
-    decodeFixture($ordinary, $temporaryDirectory.'/ordinary-output.mp4');
+    decodeFixture($ordinary, $temporaryDirectory.'/ordinary-output.mp4', $probeStartedAt);
 
     $fastStart = $temporaryDirectory.'/faststart.mp4';
     createFixture($fastStart, 3, true, false);
@@ -225,7 +227,7 @@ function frameSideDataTypes(string $input): array
 }
 
 /** @return array{width: int, height: int} */
-function decodeFixture(string $input, string $output): array
+function decodeFixture(string $input, string $output, ?int $probeStartedAt = null): array
 {
     $process = new Process([VIDEO_DECODER, $input, $output], timeout: 140);
     $process->run();
@@ -236,6 +238,10 @@ function decodeFixture(string $input, string $output): array
             $message = 'The video decoder rejected a supported synthetic fixture during '.$diagnostic['phase'];
             if ($diagnostic['cause'] !== null) {
                 $message .= ' (cause='.$diagnostic['cause'].', exit='.($diagnostic['exit'] ?? 'none').', signal='.($diagnostic['signal'] ?? 'none').', stderr='.$diagnostic['stderr'].')';
+            }
+            if ($probeStartedAt !== null && $diagnostic['phase'] === 'transcode') {
+                $reproduction = reproduceOrdinaryFixtureTranscode($input, $probeStartedAt);
+                $message .= ' Synthetic-only FFmpeg reproduction: '.$reproduction;
             }
             $message .= '.';
         }
@@ -290,6 +296,122 @@ function decodeFixture(string $input, string $output): array
     }
 
     return ['width' => $facts['width'], 'height' => $facts['height']];
+}
+
+/**
+ * Reproduce only the first generated ordinary fixture's transcode failure.
+ * This intentionally mirrors the native helper command and its process caps.
+ */
+function reproduceOrdinaryFixtureTranscode(string $input, int $probeStartedAt): string
+{
+    $output = dirname($input).'/ordinary-reproduction.mp4';
+    $remainingSeconds = 180 - ((hrtime(true) - $probeStartedAt) / 1_000_000_000);
+    if ($remainingSeconds <= 0) {
+        return 'skipped=probe_budget_exhausted';
+    }
+
+    $arguments = [
+        FFMPEG_BIN,
+        '-nostdin',
+        '-hide_banner',
+        '-loglevel', 'error',
+        '-xerror',
+        '-n',
+        '-protocol_whitelist', 'file',
+        '-f', 'mov',
+        '-enable_drefs', '0',
+        '-use_absolute_path', '0',
+        '-autorotate',
+        '-i', $input,
+        '-map', '0:v:0',
+        '-map', '0:a:0?',
+        '-sn',
+        '-dn',
+        '-map_metadata', '-1',
+        '-map_metadata:s', '-1',
+        '-map_chapters', '-1',
+        '-vf', "scale=w='min(1440,iw)':h='min(1440,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1,fps='min(30,source_fps)',format=yuv420p",
+        '-c:v', 'libx264',
+        '-preset', 'veryfast',
+        '-crf', '25',
+        '-maxrate', '2600k',
+        '-bufsize', '5200k',
+        '-profile:v', 'high',
+        '-level:v', '4.1',
+        '-threads:v', '2',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-ac', '2',
+        '-ar', '48000',
+        '-movflags', '+faststart',
+        '-f', 'mp4',
+        $output,
+    ];
+    $command = [
+        '/usr/bin/env', '-i',
+        '/usr/bin/timeout',
+        '--signal=TERM',
+        '--kill-after=1s',
+        '86s',
+        '/usr/bin/prlimit',
+        '--fsize=25000000:25000000',
+        '--as=1073741824:1073741824',
+        '--cpu=80:85',
+        '--',
+        ...$arguments,
+    ];
+    $process = new Process($command, timeout: min(90, max(1, $remainingSeconds)));
+    $process->disableOutput();
+    $stderr = '';
+    $timedOut = false;
+
+    try {
+        $process->start(function (string $type, string $data) use (&$stderr): void {
+            if ($type === Process::ERR && strlen($stderr) < 4096) {
+                $stderr .= substr($data, 0, 4096 - strlen($stderr));
+            }
+        });
+        $process->wait();
+    } catch (ProcessTimedOutException) {
+        $timedOut = true;
+    } catch (Throwable) {
+        return 'cause=process_error';
+    }
+
+    $exit = $timedOut ? 'none' : ($process->getExitCode() === null ? 'none' : (string) $process->getExitCode());
+    $signal = 'none';
+    try {
+        if (! $timedOut && $process->hasBeenSignaled()) {
+            $signalCode = $process->getTermSignal();
+            $signal = $signalCode === null ? 'none' : (string) $signalCode;
+        }
+    } catch (Throwable) {
+        $signal = 'none';
+    }
+
+    $stderr = str_replace(
+        [$input, $output, dirname($input), 'MOMENTO_INPUT_METADATA_CANARY'],
+        ['[synthetic-input]', '[synthetic-output]', '[synthetic-directory]', '[synthetic-metadata]'],
+        $stderr,
+    );
+    $stderr = preg_replace('~(?<![A-Za-z0-9])/(?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+~', '[path]', $stderr) ?? '';
+    $stderr = preg_replace('/0x[0-9a-fA-F]+/', '[address]', $stderr) ?? '';
+    $stderr = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', ' ', $stderr) ?? '';
+    $stderr = trim(preg_replace('/\s+/', ' ', $stderr) ?? '');
+    $stderr = substr($stderr, 0, 4096);
+    if ($stderr === '') {
+        $stderr = 'empty';
+    }
+
+    $cause = match (true) {
+        $timedOut => 'process_timeout',
+        $signal !== 'none' => 'wrapper_signal',
+        $exit === '0' => 'reproduction_succeeded',
+        $exit === 'none' => 'process_error',
+        default => 'wrapper_exit',
+    };
+
+    return 'cause='.$cause.',exit='.$exit.',signal='.$signal.',stderr='.$stderr;
 }
 
 function assertRejected(string $input, string $output): void
