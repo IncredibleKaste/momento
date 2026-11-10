@@ -11,6 +11,8 @@ use Illuminate\Validation\ValidationException;
 
 class ManageFollows
 {
+    public function __construct(private ManageConversationRequests $conversationRequests) {}
+
     public function request(User $actor, User $member): Follow
     {
         if ($actor->is($member)) {
@@ -51,7 +53,11 @@ class ManageFollows
             abort_unless($members->firstWhere('id', $actor->id)?->hasVerifiedEmail(), 404);
             $current = Follow::query()->lockForUpdate()->findOrFail($follow->id);
             Gate::forUser($actor)->authorize('delete', $current);
+            $wasApproved = $current->status === 'approved';
             $current->delete();
+            if ($wasApproved) {
+                $this->conversationRequests->revokeAfterUnfollow($current->follower_id, $current->followed_id);
+            }
         }, attempts: 3);
     }
 
