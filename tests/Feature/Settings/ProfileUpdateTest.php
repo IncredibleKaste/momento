@@ -34,6 +34,18 @@ test('profile name can be updated without changing the account email', function 
     expect($user->email_verified_at)->not->toBeNull();
 });
 
+test('message request preference can be updated without submitting the profile name', function () {
+    $user = User::factory()->create(['name' => 'Saved name']);
+
+    $this->actingAs($user)->patch(route('profile.update'), [
+        'message_requests_enabled' => true,
+    ])->assertRedirectToRoute('profile.edit')
+        ->assertSessionHasNoErrors();
+
+    expect($user->fresh()->name)->toBe('Saved name');
+    expect($user->fresh()->message_requests_enabled)->toBeTrue();
+});
+
 test('profile updates ignore supplied account and security attributes', function () {
     $owner = User::factory()->create();
     $other = User::factory()->create();
