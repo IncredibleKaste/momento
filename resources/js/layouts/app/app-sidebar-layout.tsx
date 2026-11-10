@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePage } from '@inertiajs/react';
 import { AppContent } from '@/components/app-content';
 import { AppShell } from '@/components/app-shell';
 import { AppSidebar } from '@/components/app-sidebar';
@@ -10,6 +11,7 @@ export default function AppSidebarLayout({
     breadcrumbs = [],
 }: AppLayoutProps) {
     const [decorationPaused, setDecorationPaused] = useState(false);
+    const isChat = usePage().component === 'messages/index';
 
     return (
         <AppShell variant="sidebar">
@@ -47,11 +49,15 @@ export default function AppSidebarLayout({
                 variant="sidebar"
                 id="main-content"
                 tabIndex={-1}
-                className="min-w-0 overflow-x-clip"
+                className={`min-w-0 overflow-x-clip ${isChat ? 'momento-chat-main' : ''}`}
             >
-                <div className="momento-page mx-auto flex min-h-svh w-full flex-col">
+                <div
+                    className={`momento-page mx-auto flex min-h-svh w-full flex-col ${isChat ? 'momento-chat-page' : ''}`}
+                >
                     <AppSidebarHeader breadcrumbs={breadcrumbs} />
-                    <div className="flex flex-1 flex-col">{children}</div>
+                    <div className="momento-page-body flex flex-1 flex-col">
+                        {children}
+                    </div>
                     <footer className="momento-footer flex flex-wrap items-center justify-between gap-4 text-xs text-muted-foreground">
                         <span>© {new Date().getFullYear()} Momento</span>
                         <button
