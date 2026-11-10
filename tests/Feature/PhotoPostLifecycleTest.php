@@ -322,6 +322,69 @@ it('does not release staging capacity while an upload writer still owns its canc
     Storage::disk('photo_posts')->assertMissing($post->raw_key);
 });
 
+it('retains staging charge when raw-file absence cannot be proven after inspection', function () {
+    $post = PhotoPost::factory()->create([
+        'status' => PhotoPostStatus::Queued,
+        'staging_bytes_charged' => 123,
+        'processed_bytes_charged' => 0,
+    ]);
+    $disk = Storage::fake('photo_posts');
+    $disk->put($post->raw_key, 'synthetic raw input');
+    $directory = $disk->path(dirname($post->raw_key));
+    $permissions = fileperms($directory);
+    if (! is_int($permissions) || ! @chmod($directory, 0000)) {
+        test()->markTestSkipped('The test environment cannot change directory permissions.');
+    }
+    try {
+        if (@scandir($directory) !== false) {
+            test()->markTestSkipped('The test process can still read a mode-0000 directory.');
+        }
+    } finally {
+        @chmod($directory, $permissions & 0777);
+    }
+
+    $blockedDuringInspection = false;
+    $realInspector = app(WebpOutputInspector::class);
+    $inspector = Mockery::mock(WebpOutputInspector::class)->makePartial();
+    $inspector->shouldReceive('inspect')->once()->andReturnUsing(function (string $path) use (
+        $realInspector,
+        $directory,
+        &$blockedDuringInspection,
+    ): array {
+        $facts = $realInspector->inspect($path);
+        if (! @chmod($directory, 0000)) {
+            throw new RuntimeException('Could not make the artifact parent unreadable after inspection.');
+        }
+        $blockedDuringInspection = true;
+
+        return $facts;
+    });
+
+    try {
+        (new ProcessPhotoPost($post->id, $post->attempt_token))->handle(
+            app(PhotoDecoder::class),
+            $inspector,
+            app(ManagePhotoPosts::class),
+        );
+        expect($blockedDuringInspection)->toBeTrue()
+            ->and($post->fresh()->status)->toBe(PhotoPostStatus::Failed)
+            ->and($post->fresh()->staging_bytes_charged)->toBe(123)
+            ->and($post->fresh()->processed_bytes_charged)->toBe(0)
+            ->and($post->fresh()->cleanup_completed_at)->toBeNull();
+    } finally {
+        @chmod($directory, $permissions & 0777);
+    }
+
+    expect(is_file($disk->path($post->raw_key)))->toBeTrue()
+        ->and(is_file($disk->path($post->output_key)))->toBeTrue();
+    $post->update(['cleanup_due_at' => now()->subSecond()]);
+    expect(app(ManagePhotoPosts::class)->reconcile())->toBe(1)
+        ->and($post->fresh()->status)->toBe(PhotoPostStatus::Failed)
+        ->and($post->fresh()->staging_bytes_charged)->toBe(0)
+        ->and($post->fresh()->processed_bytes_charged)->toBe(0)
+        ->and($post->fresh()->cleanup_completed_at)->not->toBeNull();
+});
+
 it('uses the same retained operation guard for stale staging cancellation and reconciliation', function () {
     $owner = User::factory()->create();
     $post = PhotoPost::factory()->for($owner)->create([
@@ -619,21 +682,19 @@ it('retains staging and processed charges when artifact deletion fails, then rel
         'cleanup_due_at' => now()->subSecond(),
         'cleanup_completed_at' => null,
     ]);
-    $root = Storage::disk('photo_posts')->path('');
-    $objects = [$post->raw_key => true, $post->output_key => true];
+    $fakeDisk = Storage::fake('photo_posts');
+    $root = $fakeDisk->path('');
+    $fakeDisk->put($post->raw_key, 'synthetic raw');
+    $fakeDisk->put($post->output_key, 'synthetic partial output');
     $deleteState = ['allowed' => false];
     $disk = Mockery::mock();
     $disk->shouldReceive('path')->andReturnUsing(fn (string $path): string => $root.'/'.$path);
-    $disk->shouldReceive('exists')->andReturnUsing(function (string $key) use (&$objects): bool {
-        return $objects[$key] ?? false;
-    });
-    $disk->shouldReceive('delete')->andReturnUsing(function (string $key) use (&$deleteState, &$objects): bool {
+    $disk->shouldReceive('delete')->andReturnUsing(function (string $key) use (&$deleteState, $root): bool {
         if (! $deleteState['allowed']) {
             return false;
         }
-        unset($objects[$key]);
 
-        return true;
+        return @unlink($root.'/'.$key);
     });
     Storage::shouldReceive('disk')->with('photo_posts')->andReturn($disk);
 

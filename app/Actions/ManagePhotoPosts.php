@@ -310,22 +310,114 @@ class ManagePhotoPosts
 
     private function deleteArtifacts(PhotoPost $post): bool
     {
-        $disk = Storage::disk('photo_posts');
         $clean = true;
-        foreach ([$post->raw_key, $post->output_key] as $key) {
-            try {
-                if ($disk->exists($key) && ! $disk->delete($key)) {
-                    $clean = false;
-                }
-                if ($disk->exists($key)) {
-                    $clean = false;
-                }
-            } catch (\Throwable) {
+        foreach (['raw_key', 'output_key'] as $field) {
+            if (! $this->deleteArtifact($post, $field, $post->{$field})) {
                 $clean = false;
             }
         }
 
         return $clean;
+    }
+
+    public function deleteRawInput(PhotoPost $post): bool
+    {
+        return $this->deleteArtifact($post, 'raw_key', $post->raw_key);
+    }
+
+    private function deleteArtifact(PhotoPost $post, string $field, string $key): bool
+    {
+        if (! $this->isKnownArtifactKey($post, $field, $key)
+            || config('filesystems.disks.photo_posts.driver') !== 'local') {
+            return false;
+        }
+
+        try {
+            $disk = Storage::disk('photo_posts');
+            $present = $this->artifactPresent($disk, $key);
+            if ($present === null) {
+                return false;
+            }
+            if ($present) {
+                try {
+                    $disk->delete($key);
+                } catch (\Throwable) {
+                    // The final filesystem proof decides whether the charge can be released.
+                }
+            }
+
+            return $this->artifactPresent($disk, $key) === false;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function isKnownArtifactKey(PhotoPost $post, string $field, string $key): bool
+    {
+        if (! Str::isUuid($post->attempt_token)) {
+            return false;
+        }
+
+        $token = $post->attempt_token;
+        $knownKeys = match ($field) {
+            'raw_key' => ["{$token}/original", "photo-posts/{$token}/raw"],
+            'output_key' => ["{$token}/processed.webp", "photo-posts/{$token}/processed.webp"],
+            default => [],
+        };
+
+        return in_array($key, $knownKeys, true);
+    }
+
+    private function artifactPresent(mixed $disk, string $key): ?bool
+    {
+        $root = $disk->path('');
+        if (! is_string($root)) {
+            return null;
+        }
+        $root = rtrim($root, DIRECTORY_SEPARATOR);
+        if ($root === '') {
+            $root = DIRECTORY_SEPARATOR;
+        }
+        if (is_link($root) || ! is_dir($root) || ! is_readable($root) || ! is_executable($root)) {
+            return null;
+        }
+        $root = realpath($root);
+        if (! is_string($root)) {
+            return null;
+        }
+
+        $parent = $root;
+        $parts = explode('/', $key);
+        foreach ($parts as $index => $part) {
+            if (is_link($parent) || ! is_dir($parent) || ! is_readable($parent) || ! is_executable($parent)
+                || realpath($parent) !== $parent) {
+                return null;
+            }
+            $entries = @scandir($parent);
+            if (! is_array($entries)) {
+                return null;
+            }
+            if (! in_array($part, $entries, true)) {
+                return false;
+            }
+
+            $path = $parent.DIRECTORY_SEPARATOR.$part;
+            $stat = @lstat($path);
+            $resolved = realpath($path);
+            if (! is_array($stat) || is_link($path) || ! is_string($resolved) || $resolved !== $path) {
+                return null;
+            }
+            $type = $stat['mode'] & 0170000;
+            if ($index === array_key_last($parts)) {
+                return $type === 0100000 ? true : null;
+            }
+            if ($type !== 0040000) {
+                return null;
+            }
+            $parent = $path;
+        }
+
+        return null;
     }
 
     private function reportOverdueDeletion(PhotoPost $post): void

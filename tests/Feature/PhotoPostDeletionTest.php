@@ -137,21 +137,19 @@ it('does not resurrect a deleted operation on replay and gives repeat deletion a
 it('keeps deleted media charged after storage failure and releases it only after verified reconciliation', function () {
     $owner = User::factory()->create();
     $post = readyDeletionPhotoPost($owner, ['processed_bytes_charged' => 91]);
-    $root = Storage::fake('photo_posts')->path('');
-    $objects = [$post->raw_key => true, $post->output_key => true];
+    $fakeDisk = Storage::fake('photo_posts');
+    $root = $fakeDisk->path('');
+    $fakeDisk->put($post->raw_key, 'synthetic private original');
+    $fakeDisk->put($post->output_key, 'synthetic private WebP');
     $allowDelete = false;
     $disk = Mockery::mock();
     $disk->shouldReceive('path')->andReturnUsing(fn (string $key): string => $root.'/'.$key);
-    $disk->shouldReceive('exists')->andReturnUsing(function (string $key) use (&$objects): bool {
-        return $objects[$key] ?? false;
-    });
-    $disk->shouldReceive('delete')->andReturnUsing(function (string $key) use (&$objects, &$allowDelete): bool {
+    $disk->shouldReceive('delete')->andReturnUsing(function (string $key) use (&$allowDelete, $root): bool {
         if (! $allowDelete) {
             return false;
         }
-        unset($objects[$key]);
 
-        return true;
+        return @unlink($root.'/'.$key);
     });
     Storage::shouldReceive('disk')->with('photo_posts')->andReturn($disk);
 
@@ -166,12 +164,119 @@ it('keeps deleted media charged after storage failure and releases it only after
     $this->get(route('photo-posts.show', $post))->assertNotFound();
 
     $allowDelete = true;
-    $post->update(['cleanup_due_at' => now()->subSecond()]);
+    PhotoPost::query()->whereKey($post->id)->update(['cleanup_due_at' => now()->subSecond()]);
     expect(app(ManagePhotoPosts::class)->reconcile())->toBe(1)
         ->and($post->fresh()->status)->toBe(PhotoPostStatus::Deleted)
         ->and($post->fresh()->processed_bytes_charged)->toBe(0)
         ->and($post->fresh()->cleanup_completed_at)->not->toBeNull()
-        ->and($objects)->toBe([]);
+        ->and(is_file($root.'/'.$post->raw_key))->toBeFalse()
+        ->and(is_file($root.'/'.$post->output_key))->toBeFalse();
+});
+
+it('retains cleanup charges while a real artifact parent is unreadable, then retries after access returns', function () {
+    $post = PhotoPost::factory()->create([
+        'status' => PhotoPostStatus::Failed,
+        'staging_bytes_charged' => 123,
+        'processed_bytes_charged' => 30,
+        'cleanup_due_at' => now()->subSecond(),
+        'cleanup_completed_at' => null,
+    ]);
+    $disk = Storage::fake('photo_posts');
+    $disk->put($post->raw_key, 'synthetic raw');
+    $disk->put($post->output_key, 'synthetic output');
+    $directory = $disk->path(dirname($post->raw_key));
+    $permissions = fileperms($directory);
+    if (! is_int($permissions) || ! @chmod($directory, 0000)) {
+        test()->markTestSkipped('The test environment cannot change directory permissions.');
+    }
+
+    try {
+        if (@scandir($directory) !== false) {
+            test()->markTestSkipped('The test process can still read a mode-0000 directory.');
+        }
+
+        expect(app(ManagePhotoPosts::class)->reconcile())->toBe(0)
+            ->and($post->fresh()->staging_bytes_charged)->toBe(123)
+            ->and($post->fresh()->processed_bytes_charged)->toBe(30)
+            ->and($post->fresh()->cleanup_completed_at)->toBeNull();
+    } finally {
+        @chmod($directory, $permissions & 0777);
+    }
+
+    expect(is_file($disk->path($post->raw_key)))->toBeTrue()
+        ->and(is_file($disk->path($post->output_key)))->toBeTrue();
+    PhotoPost::query()->whereKey($post->id)->update(['cleanup_due_at' => now()->subSecond()]);
+    expect($post->fresh()->status)->toBe(PhotoPostStatus::Failed)
+        ->and($post->fresh()->cleanup_due_at->lessThanOrEqualTo(now()))->toBeTrue();
+    expect(app(ManagePhotoPosts::class)->reconcile())->toBe(1)
+        ->and($post->fresh()->staging_bytes_charged)->toBe(0)
+        ->and($post->fresh()->processed_bytes_charged)->toBe(0)
+        ->and($post->fresh()->cleanup_completed_at)->not->toBeNull();
+});
+
+it('retries cleanup of the previously stored photo-posts key shapes', function () {
+    $token = (string) Str::uuid();
+    $post = PhotoPost::factory()->create([
+        'status' => PhotoPostStatus::Failed,
+        'attempt_token' => $token,
+        'raw_key' => "photo-posts/{$token}/raw",
+        'output_key' => "photo-posts/{$token}/processed.webp",
+        'staging_bytes_charged' => 123,
+        'processed_bytes_charged' => 30,
+        'cleanup_due_at' => now()->subSecond(),
+        'cleanup_completed_at' => null,
+    ]);
+    $fakeDisk = Storage::fake('photo_posts');
+    $fakeDisk->put($post->raw_key, 'legacy raw');
+    $fakeDisk->put($post->output_key, 'legacy output');
+    $root = $fakeDisk->path('');
+    $deleteAllowed = false;
+    $disk = Mockery::mock();
+    $disk->shouldReceive('path')->andReturnUsing(fn (string $key): string => $root.'/'.$key);
+    $disk->shouldReceive('delete')->andReturnUsing(function (string $key) use (&$deleteAllowed, $root): bool {
+        return $deleteAllowed && @unlink($root.'/'.$key);
+    });
+    Storage::shouldReceive('disk')->with('photo_posts')->andReturn($disk);
+
+    $posts = app(ManagePhotoPosts::class);
+    expect($posts->reconcile())->toBe(0)
+        ->and($post->fresh()->staging_bytes_charged)->toBe(123)
+        ->and($post->fresh()->processed_bytes_charged)->toBe(30);
+
+    $deleteAllowed = true;
+    PhotoPost::query()->whereKey($post->id)->update(['cleanup_due_at' => now()->subSecond()]);
+    expect($post->fresh()->status)->toBe(PhotoPostStatus::Failed)
+        ->and($post->fresh()->cleanup_due_at->lessThanOrEqualTo(now()))->toBeTrue();
+    expect($posts->reconcile())->toBe(1)
+        ->and($post->fresh()->staging_bytes_charged)->toBe(0)
+        ->and($post->fresh()->processed_bytes_charged)->toBe(0)
+        ->and(is_file($root.'/'.$post->raw_key))->toBeFalse()
+        ->and(is_file($root.'/'.$post->output_key))->toBeFalse();
+});
+
+it('does not delete files through an unknown artifact key shape', function () {
+    $outside = null;
+    try {
+        $disk = Storage::fake('photo_posts');
+        $outside = dirname($disk->path('')).'/photo-post-outside-'.Str::uuid();
+        file_put_contents($outside, 'outside storage root');
+        $post = PhotoPost::factory()->create([
+            'status' => PhotoPostStatus::Failed,
+            'raw_key' => '../'.basename($outside),
+            'staging_bytes_charged' => 123,
+            'processed_bytes_charged' => 0,
+            'cleanup_due_at' => now()->subSecond(),
+            'cleanup_completed_at' => null,
+        ]);
+
+        expect(app(ManagePhotoPosts::class)->reconcile())->toBe(0)
+            ->and($post->fresh()->staging_bytes_charged)->toBe(123)
+            ->and(is_file($outside))->toBeTrue();
+    } finally {
+        if (is_string($outside)) {
+            @unlink($outside);
+        }
+    }
 });
 
 it('keeps a deletion tombstone and charge when storage is removed but the accounting transaction fails', function () {
@@ -213,10 +318,12 @@ it('clamps the pre-deadline retry, then reports an overdue cleanup once', functi
         'staging_bytes_charged' => 0,
         'processed_bytes_charged' => 91,
     ]);
-    $root = Storage::fake('photo_posts')->path('');
+    $fakeDisk = Storage::fake('photo_posts');
+    $root = $fakeDisk->path('');
+    $fakeDisk->put($post->raw_key, 'synthetic private original');
+    $fakeDisk->put($post->output_key, 'synthetic private WebP');
     $disk = Mockery::mock();
     $disk->shouldReceive('path')->andReturnUsing(fn (string $key): string => $root.'/'.$key);
-    $disk->shouldReceive('exists')->andReturnTrue();
     $disk->shouldReceive('delete')->andReturnFalse();
     Storage::shouldReceive('disk')->with('photo_posts')->andReturn($disk);
     Log::spy();
@@ -238,7 +345,9 @@ it('clamps the pre-deadline retry, then reports an overdue cleanup once', functi
         ['photo_post_id' => $post->id],
     );
     expect($post->fresh()->processed_bytes_charged)->toBe(91)
-        ->and($post->fresh()->cleanup_completed_at)->toBeNull();
+        ->and($post->fresh()->cleanup_completed_at)->toBeNull()
+        ->and(is_file($root.'/'.$post->raw_key))->toBeTrue()
+        ->and(is_file($root.'/'.$post->output_key))->toBeTrue();
 });
 
 it('serializes concurrent deletion retries under the same PostgreSQL operation guard', function () {
