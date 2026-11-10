@@ -19,6 +19,8 @@ class ResetUserPassword implements ResetsUserPasswords
      */
     public function reset(User $user, array $input): void
     {
+        abort_if($user->disabled_at !== null, 403);
+
         if (blank($user->getAuthPassword())) {
             throw ValidationException::withMessages([
                 'email' => 'This password reset link is invalid or has expired.',

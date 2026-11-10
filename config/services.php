@@ -1,5 +1,15 @@
 <?php
 
+$decodeDomains = static function (mixed $value): array {
+    if (! is_string($value)) {
+        return [];
+    }
+
+    $domains = json_decode($value, true);
+
+    return is_array($domains) ? array_values(array_filter($domains, 'is_string')) : [];
+};
+
 return [
 
     /*
@@ -13,6 +23,20 @@ return [
     | a conventional file to locate the various service credentials.
     |
     */
+
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect_uri' => env('GOOGLE_REDIRECT_URI', rtrim(config('app.url'), '/').'/auth/oidc/google/callback'),
+    ],
+
+    'switch' => [
+        'client_id' => env('SWITCH_CLIENT_ID'),
+        'client_secret' => env('SWITCH_CLIENT_SECRET'),
+        'redirect_uri' => env('SWITCH_REDIRECT_URI', rtrim(config('app.url'), '/').'/auth/oidc/switch/callback'),
+        'environment' => env('SWITCH_ENVIRONMENT'),
+        'institutional_domains' => $decodeDomains(env('SWITCH_INSTITUTIONAL_DOMAINS', '[]')),
+    ],
 
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),

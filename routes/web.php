@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\OidcAuthenticationController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmailUpdatesUnsubscribeController;
@@ -48,6 +49,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->whereNumber('follow')->middleware('throttle:follow-actions')->name('follows.approve');
     Route::delete('follow-requests/{follow}', [FollowController::class, 'destroy'])
         ->whereNumber('follow')->middleware('throttle:follow-actions')->name('follows.destroy');
+});
+
+Route::middleware(['guest', 'throttle:10,1'])->group(function (): void {
+    Route::get('auth/oidc/{provider}/start', [OidcAuthenticationController::class, 'start'])
+        ->where('provider', 'google|switch')->name('oidc.start');
+    Route::get('auth/oidc/{provider}/callback', [OidcAuthenticationController::class, 'callback'])
+        ->where('provider', 'google|switch')->name('oidc.callback');
+    Route::get('auth/oidc/contact', [OidcAuthenticationController::class, 'contact'])->name('oidc.contact');
+    Route::post('auth/oidc/contact', [OidcAuthenticationController::class, 'storeContact'])->name('oidc.contact.store');
+    Route::get('auth/oidc/contact/verify/{proof}', [OidcAuthenticationController::class, 'verifyContact'])
+        ->middleware('signed')->name('oidc.contact.verify');
+    Route::post('auth/oidc/contact/verify/{proof}', [OidcAuthenticationController::class, 'completeContact'])
+        ->middleware('signed')->name('oidc.contact.complete');
 });
 
 require __DIR__.'/settings.php';

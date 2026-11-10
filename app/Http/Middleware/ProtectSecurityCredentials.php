@@ -41,7 +41,7 @@ class ProtectSecurityCredentials
             if ($management) {
                 abort_unless($user && filled($user->getAuthPassword()), 403);
                 $request->user()->refresh();
-            } elseif (! $user || blank($user->getAuthPassword()) || ! $user->hasEnabledTwoFactorAuthentication()) {
+            } elseif (! $user || $user->disabled_at || blank($user->getAuthPassword()) || ! $user->hasEnabledTwoFactorAuthentication()) {
                 return app(FailedTwoFactorLoginResponse::class)->toResponse($request);
             }
 
