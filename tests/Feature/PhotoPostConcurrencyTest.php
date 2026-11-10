@@ -64,7 +64,7 @@ it('admits no more than four concurrent accounts into staging on PostgreSQL', fu
         }
 
         $results = Concurrency::driver('process')->run($tasks, timeout: 45);
-        expect(array_count_values($results))->toBe(['admitted' => 4, 'capacity' => 1]);
+        expect(array_count_values($results))->toEqual(['admitted' => 4, 'capacity' => 1]);
         expect(PhotoPost::whereIn('user_id', $userIds)->count())->toBe(4)
             ->and(PhotoPost::whereIn('user_id', $userIds)->sum('staging_bytes_charged'))
             ->toBeLessThanOrEqual(config('photo_processing.max_staging_bytes'));
