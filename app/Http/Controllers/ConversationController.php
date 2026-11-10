@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Actions\ManageConversation;
+use App\Actions\ManageConversationAttachments;
 use App\Actions\ManageConversationRequests;
 use App\Models\Conversation;
+use App\Models\ConversationAttachmentSend;
 use App\Models\ConversationMessage;
 use App\Models\ConversationParticipant;
 use App\Models\ConversationRequest;
@@ -14,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -149,7 +152,7 @@ class ConversationController extends Controller
         return response()->json(['data' => $recipients]);
     }
 
-    public function show(Request $request, Conversation $conversation, ManageConversation $conversations, ConversationAccess $access): Response
+    public function show(Request $request, Conversation $conversation, ManageConversation $conversations, ManageConversationAttachments $attachments, ConversationAccess $access): Response
     {
         $viewer = $request->user();
         $participant = $conversations->participant($conversation, $viewer);
@@ -167,6 +170,7 @@ class ConversationController extends Controller
         $member = $conversation->member_one_id === $viewer->id ? $conversation->memberTwo : $conversation->memberOne;
         $canSend = $access->canSend($viewer, $member);
         $requestPermission = $access->requestPermission($viewer, $member);
+        $attachmentProjection = $attachments->projection($messages->pluck('id')->all(), $canSend);
 
         return $this->privatePage($request, 'messages/index', [
             'conversations' => $this->rail($viewer, $request->string('q')->trim()->limit(80)->toString()),
@@ -180,6 +184,7 @@ class ConversationController extends Controller
                     'senderName' => $message->sender->name,
                     'body' => $message->body,
                     'createdAt' => $message->created_at?->toISOString(),
+                    ...$attachmentProjection[$message->id],
                 ])->all(),
                 'unreadCount' => $unreadCount,
                 'lastReadMessageId' => $participant->last_read_message_id,
@@ -187,6 +192,8 @@ class ConversationController extends Controller
                 'isLatestPage' => $before === null,
                 'canSend' => $canSend,
                 'requestPermission' => $requestPermission,
+                'attachmentCapabilities' => $attachments->capabilities(),
+                'pendingAttachmentSend' => $this->attachmentStatus($attachments->pendingFor($viewer, $conversation)),
             ],
         ]);
     }
@@ -207,6 +214,9 @@ class ConversationController extends Controller
 
     public function sendRequest(Request $request, User $member, ManageConversationRequests $requests): RedirectResponse
     {
+        if ($request->exists('attachments') || $request->hasFile('attachments')) {
+            throw ValidationException::withMessages(['attachments' => 'Files can only be sent after a conversation is available.']);
+        }
         $validated = $request->validate([
             'body' => ['required', 'string', 'max:500', 'regex:/\A[^\x00]*\z/u'],
             'nonce' => ['required', 'uuid'],
@@ -260,6 +270,9 @@ class ConversationController extends Controller
     public function send(Request $request, Conversation $conversation, ManageConversation $conversations): RedirectResponse
     {
         $conversations->participant($conversation, $request->user());
+        if ($request->exists('attachments') || $request->hasFile('attachments')) {
+            throw ValidationException::withMessages(['attachments' => 'Use the attachment message endpoint to send files.']);
+        }
         $validated = $request->validate([
             'body' => ['required', 'string', 'max:4000'],
             'nonce' => ['required', 'uuid'],
@@ -300,23 +313,42 @@ class ConversationController extends Controller
                     $query->whereHas('memberOne', $nameMatch)->orWhereHas('memberTwo', $nameMatch);
                 });
             })
-            ->with(['conversation.memberOne:id,name', 'conversation.memberTwo:id,name', 'conversation.latestMessage'])
+            ->with(['conversation.memberOne:id,name', 'conversation.memberTwo:id,name', 'conversation.latestMessage.attachmentSend'])
             ->orderByDesc('conversation_id')->paginate(50)->withQueryString()
             ->through(function (ConversationParticipant $participant) use ($viewer): array {
                 $conversation = $participant->conversation;
                 $member = $conversation->member_one_id === $viewer->id ? $conversation->memberTwo : $conversation->memberOne;
                 $latest = $conversation->latestMessage;
+                $latestBody = $latest->body ?? '';
+                if ($latestBody === '' && $latest?->attachmentSend?->status === 'sent') {
+                    $latestBody = 'Attachment';
+                }
 
                 return [
                     'id' => $conversation->id,
                     'member' => ['id' => $member->id, 'name' => $member->name],
                     'latestMessage' => $latest ? [
-                        'body' => $latest->body,
+                        'body' => $latestBody,
                         'createdAt' => $latest->created_at?->toISOString(),
                     ] : null,
                     'unreadCount' => (int) $participant->getAttribute('unread_count'),
                 ];
             });
+    }
+
+    /** @return array{nonce: string, status: string, messageId: int|null, error: string|null}|null */
+    private function attachmentStatus(?ConversationAttachmentSend $send): ?array
+    {
+        if ($send === null) {
+            return null;
+        }
+
+        return [
+            'nonce' => $send->nonce,
+            'status' => 'processing',
+            'messageId' => $send->message_id,
+            'error' => null,
+        ];
     }
 
     /**

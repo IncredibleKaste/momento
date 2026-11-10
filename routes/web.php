@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ConversationAttachmentController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmailUpdatesUnsubscribeController;
@@ -31,6 +32,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('following', [FollowController::class, 'index'])->name('following.index');
     Route::get('messages', [ConversationController::class, 'index'])->name('messages.index');
     Route::get('messages/recipients', [ConversationController::class, 'recipients'])->middleware('throttle:people-search')->name('messages.recipients');
+    Route::post('messages/{conversation}/attachments', [ConversationAttachmentController::class, 'store'])
+        ->whereNumber('conversation')->middleware('throttle:message-send')->name('messages.attachments.store');
+    Route::get('messages/{conversation}/attachment-sends/{nonce}', [ConversationAttachmentController::class, 'status'])
+        ->whereNumber('conversation')->name('messages.attachments.status');
+    Route::match(['GET', 'HEAD'], 'message-attachments/{send}/{index}', [ConversationAttachmentController::class, 'media'])
+        ->whereNumber('send')->whereNumber('index')->name('messages.attachments.media');
     Route::get('messages/{conversation}', [ConversationController::class, 'show'])->whereNumber('conversation')->name('messages.show');
     Route::post('members/{member}/messages', [ConversationController::class, 'store'])->whereNumber('member')->name('messages.store');
     Route::post('messages/requests/{member}', [ConversationController::class, 'sendRequest'])->whereNumber('member')->middleware('throttle:message-send')->name('message-requests.store');

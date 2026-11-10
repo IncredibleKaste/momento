@@ -117,6 +117,17 @@ jobs:
             --mount type=bind,source="$GITHUB_WORKSPACE/tests/Runtime",target=/probe,readonly \
             --entrypoint php momento:ci /probe/PhotoDecoderProbe.php
 
+      - name: Qualify bounded synthetic MP4 processing
+        timeout-minutes: 5
+        run: |
+          trap 'docker rm -f momento-video-probe > /dev/null 2>&1 || true' EXIT
+          timeout --signal=KILL 180s docker run --rm --name momento-video-probe \
+            --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --cpus 2 --memory 1536m --memory-swap 1536m --pids-limit 96 \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777 \
+            --mount type=bind,source="$GITHUB_WORKSPACE/tests/Runtime",target=/probe,readonly \
+            --entrypoint php momento:ci /probe/ConversationVideoProbe.php
+
       - name: Start and exercise the application with PostgreSQL and Redis
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         env:

@@ -3,6 +3,7 @@
 namespace App\Actions;
 
 use App\Models\Conversation;
+use App\Models\ConversationAttachmentSend;
 use App\Models\ConversationMessage;
 use App\Models\ConversationParticipant;
 use App\Models\User;
@@ -63,6 +64,12 @@ class ManageConversation
 
             $existing = ConversationMessage::query()->where('conversation_id', $current->id)
                 ->where('sender_id', $actor->id)->where('client_nonce', $nonce)->first();
+
+            if (ConversationAttachmentSend::query()->where('conversation_id', $current->id)
+                ->where('sender_id', $actor->id)->where('nonce', $nonce)->exists()) {
+                throw ValidationException::withMessages(['body' => 'This retry key belongs to an attachment message. Start a new message with a new key.']);
+            }
+
             if ($existing) {
                 if ($existing->body !== $body) {
                     throw ValidationException::withMessages(['body' => 'The retry key already belongs to a different message. Edit the draft and try again.']);

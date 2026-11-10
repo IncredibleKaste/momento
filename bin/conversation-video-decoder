@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -ne 2 ]; then
+    printf 'Video processing failed.\n' >&2
+    exit 64
+fi
+
+exec /usr/bin/env -i /usr/local/bin/php /usr/local/bin/conversation-video-decoder.php "$1" "$2"

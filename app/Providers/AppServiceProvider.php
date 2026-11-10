@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -29,6 +30,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        DevCommands::artisan('queue:work photo_processing --queue=photo-processing --tries=1 --timeout=140', 'photos');
+        DevCommands::artisan('queue:work conversation_attachments --queue=conversation-attachments --tries=1 --timeout=300', 'attachments');
+        DevCommands::artisan('schedule:work', 'schedule');
         RateLimiter::for('follow-requests', function (Request $request): array {
             $actor = $request->user()->getAuthIdentifier();
             $member = $request->route('member');
