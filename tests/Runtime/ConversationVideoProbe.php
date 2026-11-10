@@ -322,6 +322,7 @@ function reproduceOrdinaryFixtureTranscode(string $input, int $probeStartedAt): 
         '-enable_drefs', '0',
         '-use_absolute_path', '0',
         '-autorotate',
+        '-threads:v', '2',
         '-i', $input,
         '-map', '0:v:0',
         '-map', '0:a:0?',

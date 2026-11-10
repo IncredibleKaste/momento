@@ -604,6 +604,7 @@ try {
         '-enable_drefs', '0',
         '-use_absolute_path', '0',
         '-autorotate',
+        '-threads:v', '2',
         '-i', $inputPath,
         '-map', '0:v:0',
         '-map', '0:a:0?',
