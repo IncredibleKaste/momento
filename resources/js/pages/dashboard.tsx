@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Head, Link } from '@inertiajs/react';
+import { useState, type MouseEvent } from 'react';
+import { Head, Link, router } from '@inertiajs/react';
 import PhotoPostCard, {
     type PhotoCardPost,
 } from '@/components/photo-post-card';
@@ -26,7 +26,7 @@ export default function Dashboard({ followedPeople, photoPosts }: Props) {
     const [pageFailed, setPageFailed] = useState(false);
 
     const pageUrl = (cursor: string | null) =>
-        dashboard({ query: cursor ? { postsCursor: cursor } : {} });
+        dashboard({ query: cursor ? { postsCursor: cursor } : {} }).url;
 
     const beginPageVisit = () => {
         setPageFailed(false);
@@ -37,6 +37,52 @@ export default function Dashboard({ followedPeople, photoPosts }: Props) {
         setPageFailed(true);
         setLoadingPage(false);
     };
+
+    const visitFeedPage =
+        (href: string, preserveScroll = false) =>
+        (event: MouseEvent<Element>) => {
+            const anchor = event.currentTarget;
+
+            if (
+                event.defaultPrevented ||
+                !(anchor instanceof HTMLAnchorElement) ||
+                event.button !== 0 ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.altKey
+            ) {
+                return;
+            }
+
+            event.preventDefault();
+
+            if (loadingPage) {
+                return;
+            }
+
+            router.get(
+                href,
+                {},
+                {
+                    preserveScroll,
+                    onStart: beginPageVisit,
+                    onError: failPageVisit,
+                    onNetworkError: () => {
+                        failPageVisit();
+                        return false;
+                    },
+                    onHttpException: (response) => {
+                        if (response.status === 429 || response.status >= 500) {
+                            failPageVisit();
+                            return false;
+                        }
+                    },
+                    onCancel: () => setLoadingPage(false),
+                    onFinish: () => setLoadingPage(false),
+                },
+            );
+        };
 
     return (
         <>
@@ -115,11 +161,7 @@ export default function Dashboard({ followedPeople, photoPosts }: Props) {
                         <Link
                             href={pageUrl(null)}
                             prefetch={false}
-                            onStart={beginPageVisit}
-                            onError={failPageVisit}
-                            onNetworkError={failPageVisit}
-                            onHttpException={failPageVisit}
-                            onFinish={() => setLoadingPage(false)}
+                            onClick={visitFeedPage(pageUrl(null))}
                             className="min-h-11 rounded-sm px-2 py-2 text-sm underline decoration-border underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2"
                         >
                             Refresh photos
@@ -160,14 +202,10 @@ export default function Dashboard({ followedPeople, photoPosts }: Props) {
                                     prefetch={false}
                                     preserveScroll
                                     aria-disabled={loadingPage}
-                                    onClick={(event) => {
-                                        if (loadingPage) event.preventDefault();
-                                    }}
-                                    onStart={beginPageVisit}
-                                    onError={failPageVisit}
-                                    onNetworkError={failPageVisit}
-                                    onHttpException={failPageVisit}
-                                    onFinish={() => setLoadingPage(false)}
+                                    onClick={visitFeedPage(
+                                        pageUrl(photoPosts.previousCursor),
+                                        true,
+                                    )}
                                     className="inline-flex min-h-11 items-center border border-border px-4 text-sm underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-disabled:pointer-events-none aria-disabled:opacity-60"
                                 >
                                     Newer photos
@@ -179,14 +217,10 @@ export default function Dashboard({ followedPeople, photoPosts }: Props) {
                                     prefetch={false}
                                     preserveScroll
                                     aria-disabled={loadingPage}
-                                    onClick={(event) => {
-                                        if (loadingPage) event.preventDefault();
-                                    }}
-                                    onStart={beginPageVisit}
-                                    onError={failPageVisit}
-                                    onNetworkError={failPageVisit}
-                                    onHttpException={failPageVisit}
-                                    onFinish={() => setLoadingPage(false)}
+                                    onClick={visitFeedPage(
+                                        pageUrl(photoPosts.nextCursor),
+                                        true,
+                                    )}
                                     className="inline-flex min-h-11 items-center border border-border px-4 text-sm underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-disabled:pointer-events-none aria-disabled:opacity-60"
                                 >
                                     Older photos

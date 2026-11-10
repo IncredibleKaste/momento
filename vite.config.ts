@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import inertia from '@inertiajs/vite';
 import { wayfinder } from '@laravel/vite-plugin-wayfinder';
 import babel from '@rolldown/plugin-babel';
@@ -91,6 +92,11 @@ export default defineConfig(({ mode }) => ({
         sortTailwindcss: {
             functions: ['clsx', 'cn', 'cva'],
             stylesheet: 'resources/css/app.css',
+        },
+    },
+    test: {
+        alias: {
+            '@': fileURLToPath(new URL('./resources/js', import.meta.url)),
         },
     },
 }));
