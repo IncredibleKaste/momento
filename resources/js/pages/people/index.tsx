@@ -28,9 +28,9 @@ export default function People({ q, people }: Props) {
     return (
         <>
             <Head title="Find people" />
-            <div className="space-y-8 py-10">
+            <div className="space-y-6 py-6">
                 <header className="space-y-2">
-                    <h1 className="font-serif text-4xl tracking-tight sm:text-5xl">
+                    <h1 className="font-serif text-2xl tracking-tight">
                         Find people
                     </h1>
                     <p className="max-w-lg text-base leading-relaxed text-muted-foreground">
@@ -56,6 +56,7 @@ export default function People({ q, people }: Props) {
                                     type="search"
                                     defaultValue={q ?? ''}
                                     maxLength={80}
+                                    className="h-[54px] rounded-[5px] border border-b-2 border-border border-b-[color:var(--navigation-gold)] p-[15px] text-[17px] leading-5 shadow-none md:text-[17px]"
                                     aria-invalid={Boolean(errors.q)}
                                     aria-describedby={
                                         errors.q ? 'q-error' : 'q-hint'
@@ -115,25 +116,26 @@ export default function People({ q, people }: Props) {
                     </p>
                 ) : (
                     <section aria-label="Search results" className="space-y-4">
-                        <ul className="divide-y divide-border border-y border-border">
+                        <ul className="grid grid-cols-2 gap-[18px] min-[541px]:grid-cols-3">
                             {people?.data.map((member) => (
-                                <li
-                                    key={member.id}
-                                    className="flex min-w-0 items-center gap-3 py-3"
-                                >
-                                    <Avatar
-                                        aria-hidden="true"
-                                        className="size-10 shrink-0 border border-border"
-                                    >
-                                        <AvatarFallback className="bg-secondary font-serif text-foreground">
-                                            {initials(member.name)}
-                                        </AvatarFallback>
-                                    </Avatar>
+                                <li key={member.id} className="min-w-0">
                                     <Link
                                         href={show(member.id)}
-                                        className="inline-flex min-h-11 min-w-0 flex-1 items-center text-base font-medium break-all underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                        prefetch={false}
+                                        aria-label={member.name}
+                                        className="flex min-h-11 w-full min-w-0 flex-col items-center gap-2 rounded-full text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                                     >
-                                        {member.name}
+                                        <Avatar
+                                            aria-hidden="true"
+                                            className="size-[72px] shrink-0 rounded-full border-0 min-[541px]:size-[88px]"
+                                        >
+                                            <AvatarFallback className="bg-secondary font-serif text-2xl text-foreground sm:text-3xl">
+                                                {initials(member.name)}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        <span className="line-clamp-2 w-full text-center text-xs leading-4 font-medium break-words">
+                                            {member.name}
+                                        </span>
                                     </Link>
                                 </li>
                             ))}
@@ -149,7 +151,10 @@ export default function People({ q, people }: Props) {
                                         variant="outline"
                                         className="min-h-11"
                                     >
-                                        <Link href={people.prev_page_url}>
+                                        <Link
+                                            href={people.prev_page_url}
+                                            prefetch={false}
+                                        >
                                             Previous
                                         </Link>
                                     </Button>
@@ -160,7 +165,10 @@ export default function People({ q, people }: Props) {
                                         variant="outline"
                                         className="min-h-11"
                                     >
-                                        <Link href={people.next_page_url}>
+                                        <Link
+                                            href={people.next_page_url}
+                                            prefetch={false}
+                                        >
                                             Next
                                         </Link>
                                     </Button>
