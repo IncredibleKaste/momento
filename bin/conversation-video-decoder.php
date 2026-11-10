@@ -16,6 +16,7 @@ const MAX_OUTPUT_BYTES = 25_000_000;
 const MAX_DURATION_SECONDS = 60.0;
 const MAX_PROBE_OUTPUT_BYTES = 65_536;
 const MAX_FRAME_SCAN_OUTPUT_BYTES = 1_048_576;
+const MAX_NATIVE_STDERR_BYTES = 4_096;
 const MAX_LONG_EDGE = 1_440;
 const MAX_INPUT_LONG_EDGE = 4_096;
 const MAX_INPUT_PIXELS = 12_000_000;
@@ -32,7 +33,8 @@ function failVideo(): never
     throw new VideoProcessingFailure;
 }
 
-function reportFailure(string $phase): never
+/** @param array{cause: string, exit: int|null, signal: int|null, stderr: string}|null $detail */
+function reportFailure(string $phase, ?array $detail = null): never
 {
     $phase = match ($phase) {
         'input_probe', 'input_validation', 'frame_scan', 'transcode', 'output_probe', 'output_validation' => $phase,
@@ -40,6 +42,20 @@ function reportFailure(string $phase): never
     };
 
     fwrite(STDERR, 'F28_PHASE='.$phase."\n");
+    if ($phase === 'transcode' && $detail !== null) {
+        $cause = in_array($detail['cause'], ['wrapper_exit', 'wrapper_signal', 'tool_unavailable', 'process_timeout', 'process_error', 'stdout_limit', 'output_missing', 'output_empty', 'output_too_large', 'output_path_invalid'], true)
+            ? $detail['cause']
+            : 'process_error';
+        $stderr = in_array($detail['stderr'], ['resource', 'filter_option', 'encoder', 'io', 'other', 'none'], true)
+            ? $detail['stderr']
+            : 'other';
+        $exit = is_int($detail['exit']) && $detail['exit'] >= 0 && $detail['exit'] <= 255 ? (string) $detail['exit'] : 'none';
+        $signal = is_int($detail['signal']) && $detail['signal'] >= 1 && $detail['signal'] <= 64 ? (string) $detail['signal'] : 'none';
+        fwrite(STDERR, 'F28_CAUSE='.$cause."\n");
+        fwrite(STDERR, 'F28_EXIT='.$exit."\n");
+        fwrite(STDERR, 'F28_SIGNAL='.$signal."\n");
+        fwrite(STDERR, 'F28_STDERR='.$stderr."\n");
+    }
     exit(70);
 }
 
@@ -153,9 +169,12 @@ function framesHaveUnexpectedSideData(string $path): bool
     return false;
 }
 
-function runNative(array $arguments, int $wallSeconds, int $cpuSeconds, int $stdoutLimit, int $fileLimit): ?string
+/** @param array{cause: string, exit: int|null, signal: int|null, stderr: string}|null $failure */
+function runNative(array $arguments, int $wallSeconds, int $cpuSeconds, int $stdoutLimit, int $fileLimit, ?array &$failure = null): ?string
 {
     if (! is_executable(TIMEOUT) || ! is_executable(PRLIMIT)) {
+        $failure = ['cause' => 'tool_unavailable', 'exit' => null, 'signal' => null, 'stderr' => 'none'];
+
         return null;
     }
 
@@ -175,9 +194,17 @@ function runNative(array $arguments, int $wallSeconds, int $cpuSeconds, int $std
     $process->disableOutput();
     $stdout = '';
     $overflow = false;
+    $stderr = '';
 
     try {
-        $process->start(function (string $type, string $data) use ($process, $stdoutLimit, &$stdout, &$overflow): void {
+        $process->start(function (string $type, string $data) use ($process, $stdoutLimit, &$stdout, &$overflow, &$stderr): void {
+            if ($type === Process::ERR) {
+                if (strlen($stderr) < MAX_NATIVE_STDERR_BYTES) {
+                    $stderr .= substr($data, 0, MAX_NATIVE_STDERR_BYTES - strlen($stderr));
+                }
+
+                return;
+            }
             if ($type !== Process::OUT) {
                 return;
             }
@@ -193,12 +220,60 @@ function runNative(array $arguments, int $wallSeconds, int $cpuSeconds, int $std
         });
         $process->wait();
     } catch (ProcessTimedOutException) {
+        $failure = ['cause' => 'process_timeout', 'exit' => null, 'signal' => null, 'stderr' => classifyNativeStderr($stderr)];
+
         return null;
     } catch (Throwable) {
+        $failure = ['cause' => 'process_error', 'exit' => null, 'signal' => null, 'stderr' => classifyNativeStderr($stderr)];
+
         return null;
     }
 
-    return ! $overflow && $process->getExitCode() === 0 ? $stdout : null;
+    $exit = $process->getExitCode();
+    $signal = null;
+    try {
+        if ($process->hasBeenSignaled()) {
+            $signal = $process->getTermSignal();
+        }
+    } catch (Throwable) {
+        $signal = null;
+    }
+
+    if ($overflow) {
+        $failure = ['cause' => 'stdout_limit', 'exit' => $exit, 'signal' => $signal, 'stderr' => 'none'];
+
+        return null;
+    }
+    if ($exit !== 0) {
+        $cause = $signal !== null ? 'wrapper_signal' : 'wrapper_exit';
+        $failure = ['cause' => $cause, 'exit' => $exit, 'signal' => $signal, 'stderr' => classifyNativeStderr($stderr)];
+
+        return null;
+    }
+
+    return $stdout;
+}
+
+function classifyNativeStderr(string $stderr): string
+{
+    $message = strtolower($stderr);
+    if ($message === '') {
+        return 'none';
+    }
+    if (preg_match('/cannot allocate memory|out of memory|failed to create thread|pthread_create|resource temporarily unavailable/', $message) === 1) {
+        return 'resource';
+    }
+    if (preg_match('/unrecognized option|error applying option|error parsing filter|no such filter/', $message) === 1) {
+        return 'filter_option';
+    }
+    if (preg_match('/unknown encoder|encoder .* not found|no encoder found/', $message) === 1) {
+        return 'encoder';
+    }
+    if (preg_match('/permission denied|read-only file system|no such file or directory|error opening input|error opening output/', $message) === 1) {
+        return 'io';
+    }
+
+    return 'other';
 }
 
 /** @param array<string, mixed> $probe */
@@ -516,6 +591,7 @@ try {
 
     $filter = "scale=w='min(1440,iw)':h='min(1440,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1,fps='min(30,source_fps)',format=yuv420p";
     $failurePhase = 'transcode';
+    $transcodeFailure = null;
     $transcode = runNative([
         FFMPEG,
         '-nostdin',
@@ -552,16 +628,26 @@ try {
         '-movflags', '+faststart',
         '-f', 'mp4',
         $outputPath,
-    ], 86, 80, 1024, MAX_OUTPUT_BYTES);
+    ], 86, 80, 1024, MAX_OUTPUT_BYTES, $transcodeFailure);
 
     $outputBytes = @filesize($outputPath);
-    if ($transcode === null
-        || ! is_int($outputBytes)
-        || $outputBytes < 1
-        || $outputBytes > MAX_OUTPUT_BYTES
-        || is_link($outputPath)
-        || ! is_file($outputPath)
-        || realpath($outputPath) !== $outputPath) {
+    if ($transcode === null) {
+        failVideo();
+    }
+    if (! is_int($outputBytes) || ! is_file($outputPath)) {
+        $transcodeFailure = ['cause' => 'output_missing', 'exit' => 0, 'signal' => null, 'stderr' => 'none'];
+        failVideo();
+    }
+    if ($outputBytes < 1) {
+        $transcodeFailure = ['cause' => 'output_empty', 'exit' => 0, 'signal' => null, 'stderr' => 'none'];
+        failVideo();
+    }
+    if ($outputBytes > MAX_OUTPUT_BYTES) {
+        $transcodeFailure = ['cause' => 'output_too_large', 'exit' => 0, 'signal' => null, 'stderr' => 'none'];
+        failVideo();
+    }
+    if (is_link($outputPath) || realpath($outputPath) !== $outputPath) {
+        $transcodeFailure = ['cause' => 'output_path_invalid', 'exit' => 0, 'signal' => null, 'stderr' => 'none'];
         failVideo();
     }
 
@@ -593,5 +679,5 @@ try {
 }
 
 if (! $success) {
-    reportFailure($failurePhase);
+    reportFailure($failurePhase, $failurePhase === 'transcode' ? ($transcodeFailure ?? ['cause' => 'process_error', 'exit' => null, 'signal' => null, 'stderr' => 'none']) : null);
 }

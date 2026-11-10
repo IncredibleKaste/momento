@@ -19,6 +19,11 @@ if (! is_string($temporaryDirectory)) {
 }
 
 try {
+    $wrapperExit = "F28_PHASE=transcode\nF28_CAUSE=wrapper_exit\nF28_EXIT=124\nF28_SIGNAL=none\nF28_STDERR=other\n";
+    $diagnostic = decoderFailureDiagnostic($wrapperExit);
+    ensure($diagnostic !== null && $diagnostic['cause'] === 'wrapper_exit' && $diagnostic['exit'] === 124, 'The diagnostic misrepresented a wrapper exit.');
+    ensure(decoderFailureDiagnostic($wrapperExit.'synthetic private-detail canary') === null, 'The diagnostic accepted unrecognized process output.');
+
     ensure(is_executable(FFMPEG_BIN) && is_executable(FFPROBE_BIN) && is_executable(VIDEO_DECODER), 'Required native executable is missing.');
     assertCommand([FFMPEG_BIN, '-version']);
     assertCommand(['/usr/bin/timeout', '--version']);
@@ -225,10 +230,14 @@ function decodeFixture(string $input, string $output): array
     $process = new Process([VIDEO_DECODER, $input, $output], timeout: 140);
     $process->run();
     if (! $process->isSuccessful() || ! is_file($output)) {
-        $phase = decoderFailurePhase($process->getErrorOutput());
+        $diagnostic = decoderFailureDiagnostic($process->getErrorOutput());
         $message = 'The video decoder rejected a supported synthetic fixture.';
-        if ($phase !== null) {
-            $message = 'The video decoder rejected a supported synthetic fixture during '.$phase.'.';
+        if ($diagnostic !== null) {
+            $message = 'The video decoder rejected a supported synthetic fixture during '.$diagnostic['phase'];
+            if ($diagnostic['cause'] !== null) {
+                $message .= ' (cause='.$diagnostic['cause'].', exit='.($diagnostic['exit'] ?? 'none').', signal='.($diagnostic['signal'] ?? 'none').', stderr='.$diagnostic['stderr'].')';
+            }
+            $message .= '.';
         }
 
         throw new RuntimeException($message);
@@ -290,18 +299,39 @@ function assertRejected(string $input, string $output): void
     if ($process->isSuccessful() || file_exists($output) || is_link($output)) {
         throw new RuntimeException('Invalid or over-limit input was accepted or left a partial output behind.');
     }
-    if (decoderFailurePhase($process->getErrorOutput()) === null) {
+    if (decoderFailureDiagnostic($process->getErrorOutput()) === null) {
         throw new RuntimeException('The video decoder returned an invalid failure diagnostic.');
     }
 }
 
-function decoderFailurePhase(string $errorOutput): ?string
+/** @return array{phase: string, cause: string|null, exit: int|null, signal: int|null, stderr: string|null}|null */
+function decoderFailureDiagnostic(string $errorOutput): ?array
 {
-    if (preg_match('/\AF28_PHASE=(input_probe|input_validation|frame_scan|transcode|output_probe|output_validation)\n\z/D', $errorOutput, $matches) !== 1) {
+    $pattern = '/\AF28_PHASE=(input_probe|input_validation|frame_scan|transcode|output_probe|output_validation)\n'
+        .'(?:F28_CAUSE=(wrapper_exit|wrapper_signal|tool_unavailable|process_timeout|process_error|stdout_limit|output_missing|output_empty|output_too_large|output_path_invalid)\n'
+        .'F28_EXIT=(none|0|[1-9][0-9]{0,2})\n'
+        .'F28_SIGNAL=(none|[1-9][0-9]?)\n'
+        .'F28_STDERR=(none|resource|filter_option|encoder|io|other)\n)?\z/D';
+    if (preg_match($pattern, $errorOutput, $matches) !== 1) {
         return null;
     }
 
-    return $matches[1];
+    $phase = $matches[1];
+    $hasDetail = ($matches[2] ?? '') !== '';
+    if (($phase === 'transcode') !== $hasDetail) {
+        return null;
+    }
+    if (! $hasDetail) {
+        return ['phase' => $phase, 'cause' => null, 'exit' => null, 'signal' => null, 'stderr' => null];
+    }
+
+    $exit = $matches[3] === 'none' ? null : (int) $matches[3];
+    $signal = $matches[4] === 'none' ? null : (int) $matches[4];
+    if (($exit !== null && $exit > 255) || ($signal !== null && $signal > 64)) {
+        return null;
+    }
+
+    return ['phase' => $phase, 'cause' => $matches[2], 'exit' => $exit, 'signal' => $signal, 'stderr' => $matches[5]];
 }
 
 function moovIsAtEnd(string $path): bool
