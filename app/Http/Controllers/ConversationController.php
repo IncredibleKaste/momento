@@ -43,21 +43,12 @@ class ConversationController extends Controller
             ];
         }
 
-        $incoming = $requests->pageFor($viewer, true);
-        $outgoing = $requests->pageFor($viewer, false);
-        $requestCounts = $requests->activePendingCounts($viewer);
-
         return $this->privatePage($request, 'messages/index', [
             'conversations' => $this->rail($viewer, $search),
             'search' => $search,
             'thread' => null,
             'selectedRecipient' => $selectedRecipient,
-            'requests' => [
-                'incomingCount' => $requestCounts['incoming'],
-                'outgoingCount' => $requestCounts['outgoing'],
-                'incoming' => $this->requestItems($incoming, $viewer, $requests),
-                'outgoing' => $this->requestItems($outgoing, $viewer, $requests),
-            ],
+            'requests' => fn () => $this->requestPanel($viewer, $requests),
         ]);
     }
 
@@ -149,7 +140,7 @@ class ConversationController extends Controller
         return response()->json(['data' => $recipients]);
     }
 
-    public function show(Request $request, Conversation $conversation, ManageConversation $conversations, ConversationAccess $access): Response
+    public function show(Request $request, Conversation $conversation, ManageConversation $conversations, ManageConversationRequests $requests, ConversationAccess $access): Response
     {
         $viewer = $request->user();
         $participant = $conversations->participant($conversation, $viewer);
@@ -188,6 +179,8 @@ class ConversationController extends Controller
                 'canSend' => $canSend,
                 'requestPermission' => $requestPermission,
             ],
+            'selectedRecipient' => null,
+            'requests' => fn () => $this->requestPanel($viewer, $requests),
         ]);
     }
 
@@ -355,6 +348,21 @@ class ConversationController extends Controller
                 'canReopen' => $canReopen,
             ];
         });
+    }
+
+    /** @return array{incomingCount: int, outgoingCount: int, incoming: LengthAwarePaginator<int, array{id: int, member: array{id: int, name: string}, body: string, expiresAt: string|null, status: string|null, canAccept: bool, canDecline: bool, canStop: bool, canReopen: bool}>, outgoing: LengthAwarePaginator<int, array{id: int, member: array{id: int, name: string}, body: string, expiresAt: string|null, status: string|null, canAccept: bool, canDecline: bool, canStop: bool, canReopen: bool}>} */
+    private function requestPanel(User $viewer, ManageConversationRequests $requests): array
+    {
+        $incoming = $requests->pageFor($viewer, true);
+        $outgoing = $requests->pageFor($viewer, false);
+        $counts = $requests->activePendingCounts($viewer);
+
+        return [
+            'incomingCount' => $counts['incoming'],
+            'outgoingCount' => $counts['outgoing'],
+            'incoming' => $this->requestItems($incoming, $viewer, $requests),
+            'outgoing' => $this->requestItems($outgoing, $viewer, $requests),
+        ];
     }
 
     /** @param array<string, mixed> $props */
