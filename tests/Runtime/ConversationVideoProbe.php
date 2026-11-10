@@ -50,11 +50,17 @@ try {
 
     $rotated = $temporaryDirectory.'/rotated.mp4';
     assertCommand([
-        FFMPEG_BIN, '-hide_banner', '-loglevel', 'error', '-y', '-i', $ordinary,
-        '-map', '0', '-c', 'copy', '-metadata:s:v:0', 'rotate=90', $rotated,
+        FFMPEG_BIN, '-hide_banner', '-loglevel', 'error', '-y',
+        '-display_rotation:v:0', '90', '-i', $ordinary,
+        '-map', '0', '-c', 'copy', $rotated,
     ]);
+    $fixtureRotation = syntheticDisplayRotation($rotated);
+    ensure($fixtureRotation !== null && abs(abs($fixtureRotation) - 90.0) < 0.01, 'Rotated synthetic fixture lacks the expected 90-degree display matrix.');
     $rotatedFacts = decodeFixture($rotated, $temporaryDirectory.'/rotated-output.mp4');
-    ensure($rotatedFacts['width'] === 240 && $rotatedFacts['height'] === 320, 'Rotation metadata was not applied to pixels.');
+    ensure(
+        $rotatedFacts['width'] === 240 && $rotatedFacts['height'] === 320,
+        'Rotation pixels expected 240x320; got '.$rotatedFacts['width'].'x'.$rotatedFacts['height'].'.',
+    );
 
     $exactLimit = $temporaryDirectory.'/exact-60.mp4';
     createFixture($exactLimit, 60, true, true, framesPerSecond: 1);
@@ -217,6 +223,27 @@ function frameSideDataTypes(string $input): array
     }
 
     return $frameTypes;
+}
+
+function syntheticDisplayRotation(string $path): ?float
+{
+    $probe = json_decode(assertCommand([
+        FFPROBE_BIN, '-v', 'error', '-protocol_whitelist', 'file', '-f', 'mov',
+        '-show_streams', '-of', 'json', $path,
+    ]), true, flags: JSON_THROW_ON_ERROR);
+    foreach (($probe['streams'] ?? []) as $stream) {
+        if (($stream['codec_type'] ?? null) !== 'video') {
+            continue;
+        }
+        foreach (($stream['side_data_list'] ?? []) as $sideData) {
+            if (($sideData['side_data_type'] ?? null) === 'Display Matrix'
+                && is_numeric($sideData['rotation'] ?? null)) {
+                return (float) $sideData['rotation'];
+            }
+        }
+    }
+
+    return null;
 }
 
 /** @return array{width: int, height: int} */
