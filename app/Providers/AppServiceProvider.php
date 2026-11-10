@@ -52,6 +52,9 @@ class AppServiceProvider extends ServiceProvider
 
                 return response()->json(['message' => $message], 429, $headers);
             }));
+        RateLimiter::for('message-request-actions', fn (Request $request): Limit => Limit::perMinute(60)
+            ->by('message-request-actions:'.$request->user()->getAuthIdentifier())
+            ->response($this->messageRequestActionLimitResponse(...)));
         RateLimiter::for('people-search', fn (Request $request): Limit => Limit::perMinute(60)
             ->by('people-search:'.$request->user()->getAuthIdentifier()));
         RateLimiter::for('photo-posts', fn (Request $request): Limit => Limit::perMinute(5)
@@ -72,6 +75,17 @@ class AppServiceProvider extends ServiceProvider
         $message = 'Too many follow changes. Wait a minute, then refresh and try again.';
         if ($request->header('X-Inertia')) {
             return to_route('following.index')->withErrors(['follow' => $message])->withHeaders($headers);
+        }
+
+        return response()->json(['message' => $message], 429, $headers);
+    }
+
+    /** @param array<string, int|string> $headers */
+    private function messageRequestActionLimitResponse(Request $request, array $headers): Response
+    {
+        $message = 'Too many request changes. Wait a minute, then try again.';
+        if ($request->header('X-Inertia')) {
+            return to_route('messages.index')->withErrors(['request' => $message])->withHeaders($headers);
         }
 
         return response()->json(['message' => $message], 429, $headers);

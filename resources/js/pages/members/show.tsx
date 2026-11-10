@@ -8,12 +8,30 @@ import { dashboard } from '@/routes';
 import { index } from '@/routes/following';
 import { destroy, store } from '@/routes/follows';
 import { edit } from '@/routes/profile';
-import { store as startMessage } from '@/routes/messages';
+import {
+    index as messagesIndex,
+    show as messagesShow,
+    store as startMessage,
+} from '@/routes/messages';
+import { reopen as reopenMessageRequest } from '@/routes/message-requests';
 
 type Props = {
     member: { id: number; name: string };
     follow: { id: number; status: 'pending' | 'approved' } | null;
     canMessage: boolean;
+    messageAction: {
+        mode:
+            | 'direct'
+            | 'request'
+            | 'outgoing'
+            | 'incoming'
+            | 'closed'
+            | 'reopen'
+            | 'unavailable';
+        requestId?: number;
+        conversationId?: number;
+        canReopen: boolean;
+    };
     photos?: {
         data: {
             id: number;
@@ -95,7 +113,12 @@ function ProfilePhoto({
     );
 }
 
-export default function Member({ member, follow, canMessage, photos }: Props) {
+export default function Member({
+    member,
+    follow,
+    messageAction,
+    photos,
+}: Props) {
     const { auth } = usePage().props;
     const initials = useInitials();
     const own = auth.user.id === member.id;
@@ -167,10 +190,20 @@ export default function Member({ member, follow, canMessage, photos }: Props) {
                                             memberName={member.name}
                                         />
                                     )}
-                                    {canMessage && (
+                                    {messageAction.mode === 'direct' && (
                                         <Link
-                                            href={startMessage(member.id)}
-                                            method="post"
+                                            href={
+                                                messageAction.conversationId
+                                                    ? messagesShow(
+                                                          messageAction.conversationId,
+                                                      )
+                                                    : startMessage(member.id)
+                                            }
+                                            method={
+                                                messageAction.conversationId
+                                                    ? 'get'
+                                                    : 'post'
+                                            }
                                             as="button"
                                             prefetch={false}
                                             className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-[5px] border border-border bg-card px-3 py-2 text-[13px] font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring min-[541px]:px-5"
@@ -180,6 +213,64 @@ export default function Member({ member, follow, canMessage, photos }: Props) {
                                                 className="size-[17px]"
                                             />
                                             Message
+                                        </Link>
+                                    )}
+                                    {messageAction.mode === 'request' && (
+                                        <Link
+                                            href={messagesIndex.url({
+                                                query: { recipient: member.id },
+                                            })}
+                                            prefetch={false}
+                                            className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-[5px] border border-border bg-card px-3 py-2 text-[13px] font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring min-[541px]:px-5"
+                                        >
+                                            <MessageCircle
+                                                aria-hidden="true"
+                                                className="size-[17px]"
+                                            />
+                                            Send message request
+                                        </Link>
+                                    )}
+                                    {messageAction.mode === 'reopen' &&
+                                        messageAction.canReopen &&
+                                        messageAction.requestId && (
+                                            <Link
+                                                href={reopenMessageRequest(
+                                                    messageAction.requestId,
+                                                )}
+                                                method="post"
+                                                as="button"
+                                                prefetch={false}
+                                                className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-[5px] border border-border bg-card px-3 py-2 text-[13px] font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring min-[541px]:px-5"
+                                            >
+                                                <MessageCircle
+                                                    aria-hidden="true"
+                                                    className="size-[17px]"
+                                                />
+                                                Allow a new request
+                                            </Link>
+                                        )}
+                                    {[
+                                        'outgoing',
+                                        'incoming',
+                                        'closed',
+                                    ].includes(messageAction.mode) && (
+                                        <Link
+                                            href={messagesIndex.url({
+                                                query: { recipient: member.id },
+                                            })}
+                                            prefetch={false}
+                                            className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-[5px] border border-border bg-card px-3 py-2 text-[13px] font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring min-[541px]:px-5"
+                                        >
+                                            <MessageCircle
+                                                aria-hidden="true"
+                                                className="size-[17px]"
+                                            />
+                                            {messageAction.mode === 'outgoing'
+                                                ? 'Request pending'
+                                                : messageAction.mode ===
+                                                    'incoming'
+                                                  ? 'View message request'
+                                                  : 'View messaging status'}
                                         </Link>
                                     )}
                                 </div>

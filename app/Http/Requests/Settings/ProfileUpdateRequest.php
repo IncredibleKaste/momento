@@ -18,8 +18,11 @@ class ProfileUpdateRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => $this->nameRules(),
+            'name' => $this->has('message_requests_enabled') && ! array_key_exists('name', $this->all())
+                ? ['missing']
+                : $this->nameRules(),
             'email' => ['missing'],
+            'message_requests_enabled' => ['sometimes', 'boolean'],
         ];
     }
 }

@@ -1,9 +1,11 @@
-import { Form, Head, usePage } from '@inertiajs/react';
+import { Form, Head, useForm, usePage } from '@inertiajs/react';
+import type { FormEvent } from 'react';
 import { Link } from '@inertiajs/react';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { edit } from '@/routes/profile';
@@ -18,11 +20,23 @@ type PageProps = {
 export default function Profile({
     mustVerifyEmail,
     status,
+    messageRequestsEnabled,
 }: {
     mustVerifyEmail: boolean;
     status?: string;
+    messageRequestsEnabled: boolean;
 }) {
     const { auth } = usePage<PageProps>().props;
+    const requestSettings = useForm({
+        message_requests_enabled: messageRequestsEnabled,
+    });
+
+    function saveMessageRequests(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        requestSettings.patch(ProfileController.update.url(), {
+            preserveScroll: true,
+        });
+    }
 
     return (
         <>
@@ -133,6 +147,83 @@ export default function Profile({
                         </>
                     )}
                 </Form>
+
+                <section className="space-y-4 border-t border-border pt-6">
+                    <Heading
+                        variant="small"
+                        title="Message requests"
+                        description="Choose whether verified members can send you a first-contact request."
+                    />
+                    <form onSubmit={saveMessageRequests} className="space-y-4">
+                        <div className="flex items-start gap-3">
+                            <Checkbox
+                                id="message-requests-enabled"
+                                checked={
+                                    requestSettings.data
+                                        .message_requests_enabled
+                                }
+                                onCheckedChange={(checked) =>
+                                    requestSettings.setData(
+                                        'message_requests_enabled',
+                                        checked === true,
+                                    )
+                                }
+                                aria-invalid={Boolean(
+                                    requestSettings.errors
+                                        .message_requests_enabled,
+                                )}
+                                aria-describedby={
+                                    requestSettings.errors
+                                        .message_requests_enabled
+                                        ? 'message-requests-error'
+                                        : 'message-requests-description'
+                                }
+                            />
+                            <div className="grid gap-1.5">
+                                <Label htmlFor="message-requests-enabled">
+                                    Allow message requests
+                                </Label>
+                                <p
+                                    id="message-requests-description"
+                                    className="text-sm text-muted-foreground"
+                                >
+                                    Off by default. When enabled, verified
+                                    members can send you a plain-text request.
+                                    Attachments remain unavailable until you
+                                    accept. Existing chats keep their current
+                                    permissions.
+                                </p>
+                                <InputError
+                                    id="message-requests-error"
+                                    message={
+                                        requestSettings.errors
+                                            .message_requests_enabled
+                                    }
+                                    role="alert"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <Button
+                                type="submit"
+                                disabled={requestSettings.processing}
+                                className="min-h-11"
+                            >
+                                {requestSettings.processing
+                                    ? 'Saving…'
+                                    : 'Save message request setting'}
+                            </Button>
+                            {requestSettings.recentlySuccessful && (
+                                <p
+                                    role="status"
+                                    className="text-sm text-green-700 dark:text-green-400"
+                                >
+                                    Message request setting saved.
+                                </p>
+                            )}
+                        </div>
+                    </form>
+                </section>
             </div>
         </>
     );

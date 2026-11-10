@@ -6,12 +6,15 @@ use App\Models\Conversation;
 use App\Models\ConversationMessage;
 use App\Models\ConversationParticipant;
 use App\Models\User;
+use App\Services\ConversationAccess;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ManageConversation
 {
+    public function __construct(private ConversationAccess $access) {}
+
     public function start(User $actor, User $member): Conversation
     {
         if ($actor->is($member)) {
@@ -20,24 +23,31 @@ class ManageConversation
 
         return DB::transaction(function () use ($actor, $member): Conversation {
             $members = $this->lockMembers($actor->id, $member->id);
-            abort_unless($members->every(fn (User $user): bool => $user->hasVerifiedEmail()), 404);
-            abort_unless($this->mutuallyApproved($actor->id, $member->id), 404);
+            $freshActor = $members->firstWhere('id', $actor->id);
+            $freshMember = $members->firstWhere('id', $member->id);
+            abort_unless($freshActor instanceof User && $freshMember instanceof User, 404);
+            abort_unless($this->access->canSend($freshActor, $freshMember), 404);
 
-            [$first, $second] = $this->normalizedIds($actor->id, $member->id);
-            $conversation = Conversation::query()->firstOrCreate([
-                'member_one_id' => $first,
-                'member_two_id' => $second,
-            ]);
-
-            foreach ([$first, $second] as $userId) {
-                ConversationParticipant::query()->firstOrCreate([
-                    'conversation_id' => $conversation->id,
-                    'user_id' => $userId,
-                ]);
-            }
-
-            return $conversation;
+            return $this->createPair($actor->id, $member->id);
         }, attempts: 3);
+    }
+
+    public function createPair(int $firstMemberId, int $secondMemberId): Conversation
+    {
+        [$first, $second] = $this->normalizedIds($firstMemberId, $secondMemberId);
+        $conversation = Conversation::query()->firstOrCreate([
+            'member_one_id' => $first,
+            'member_two_id' => $second,
+        ]);
+
+        foreach ([$first, $second] as $userId) {
+            ConversationParticipant::query()->firstOrCreate([
+                'conversation_id' => $conversation->id,
+                'user_id' => $userId,
+            ]);
+        }
+
+        return $conversation;
     }
 
     public function send(User $actor, int $conversationId, string $body, string $nonce): ConversationMessage
@@ -48,6 +58,8 @@ class ManageConversation
             $members = $this->lockMembers($conversation->member_one_id, $conversation->member_two_id);
             $current = Conversation::query()->lockForUpdate()->findOrFail($conversation->id);
             $this->participant($current, $actor);
+            $freshActor = $members->firstWhere('id', $actor->id);
+            abort_unless($freshActor instanceof User, 404);
 
             $existing = ConversationMessage::query()->where('conversation_id', $current->id)
                 ->where('sender_id', $actor->id)->where('client_nonce', $nonce)->first();
@@ -60,8 +72,12 @@ class ManageConversation
             }
 
             abort_unless($members->every(fn (User $user): bool => $user->hasVerifiedEmail()), 404);
-            if (! $this->mutuallyApproved($current->member_one_id, $current->member_two_id)) {
-                throw ValidationException::withMessages(['body' => 'Messages can only be sent while both members follow each other.']);
+            $otherMemberId = $actor->id === $current->member_one_id ? $current->member_two_id : $current->member_one_id;
+            $otherMember = $members->firstWhere('id', $otherMemberId);
+            abort_unless($otherMember instanceof User, 404);
+
+            if (! $this->access->canSend($freshActor, $otherMember)) {
+                throw ValidationException::withMessages(['body' => 'New messages are unavailable until both members follow each other or a message request is accepted.']);
             }
 
             return ConversationMessage::query()->create([
@@ -92,14 +108,6 @@ class ManageConversation
     {
         return ConversationParticipant::query()->where('conversation_id', $conversation->id)
             ->where('user_id', $actor->id)->firstOrFail();
-    }
-
-    private function mutuallyApproved(int $first, int $second): bool
-    {
-        return DB::table('follows')->where('status', 'approved')->where(function ($query) use ($first, $second): void {
-            $query->where(fn ($query) => $query->where('follower_id', $first)->where('followed_id', $second))
-                ->orWhere(fn ($query) => $query->where('follower_id', $second)->where('followed_id', $first));
-        })->count() === 2;
     }
 
     /** @return Collection<int, User> */

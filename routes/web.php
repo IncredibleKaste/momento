@@ -30,8 +30,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('people', PeopleSearchController::class)->middleware('throttle:people-search')->name('people.index');
     Route::get('following', [FollowController::class, 'index'])->name('following.index');
     Route::get('messages', [ConversationController::class, 'index'])->name('messages.index');
+    Route::get('messages/recipients', [ConversationController::class, 'recipients'])->middleware('throttle:people-search')->name('messages.recipients');
     Route::get('messages/{conversation}', [ConversationController::class, 'show'])->whereNumber('conversation')->name('messages.show');
     Route::post('members/{member}/messages', [ConversationController::class, 'store'])->whereNumber('member')->name('messages.store');
+    Route::post('messages/requests/{member}', [ConversationController::class, 'sendRequest'])->whereNumber('member')->middleware('throttle:message-send')->name('message-requests.store');
+    Route::post('message-requests/{conversationRequest}/accept', [ConversationController::class, 'acceptRequest'])->whereNumber('conversationRequest')->middleware('throttle:message-request-actions')->name('message-requests.accept');
+    Route::post('message-requests/{conversationRequest}/decline', [ConversationController::class, 'declineRequest'])->whereNumber('conversationRequest')->middleware('throttle:message-request-actions')->name('message-requests.decline');
+    Route::post('message-requests/{conversationRequest}/stop', [ConversationController::class, 'stopRequest'])->whereNumber('conversationRequest')->middleware('throttle:message-request-actions')->name('message-requests.stop');
+    Route::post('message-requests/{conversationRequest}/reopen', [ConversationController::class, 'reopenRequest'])->whereNumber('conversationRequest')->middleware('throttle:message-request-actions')->name('message-requests.reopen');
     Route::post('messages/{conversation}/send', [ConversationController::class, 'send'])->whereNumber('conversation')->middleware('throttle:message-send')->name('messages.send');
     Route::post('messages/{conversation}/read/{message}', [ConversationController::class, 'read'])
         ->whereNumber('conversation')->whereNumber('message')->name('messages.read');

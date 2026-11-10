@@ -3,35 +3,147 @@
 namespace App\Http\Controllers;
 
 use App\Actions\ManageConversation;
+use App\Actions\ManageConversationRequests;
 use App\Models\Conversation;
 use App\Models\ConversationMessage;
 use App\Models\ConversationParticipant;
+use App\Models\ConversationRequest;
 use App\Models\User;
+use App\Services\ConversationAccess;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
 
 class ConversationController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, ManageConversationRequests $requests, ConversationAccess $access): Response
     {
         $viewer = $request->user();
         $search = $request->string('q')->trim()->limit(80)->toString();
+        $recipientId = $request->query('recipient');
+        abort_if($recipientId !== null && (! is_string($recipientId) || preg_match('/^[1-9][0-9]*$/D', $recipientId) !== 1), 404);
+        $selectedRecipient = null;
+
+        if (is_string($recipientId)) {
+            $recipient = User::query()->whereKey((int) $recipientId)->whereNotNull('email_verified_at')->firstOrFail();
+            $mode = $access->interactionMode($viewer, $recipient);
+            abort_if($mode === 'unavailable', 404);
+            $latest = $access->latestRequest($viewer->id, $recipient->id);
+            $selectedRecipient = [
+                'id' => $recipient->id,
+                'name' => $recipient->name,
+                'mode' => $mode,
+                'requestId' => $latest?->id,
+                'conversationId' => Conversation::query()->where('member_one_id', min($viewer->id, $recipient->id))
+                    ->where('member_two_id', max($viewer->id, $recipient->id))->value('id'),
+                'canReopen' => $mode === 'reopen' && $latest?->recipient_id === $viewer->id,
+            ];
+        }
 
         return $this->privatePage($request, 'messages/index', [
             'conversations' => $this->rail($viewer, $search),
             'search' => $search,
             'thread' => null,
+            'selectedRecipient' => $selectedRecipient,
+            'requests' => fn () => $this->requestPanel($viewer, $requests),
         ]);
     }
 
-    public function show(Request $request, Conversation $conversation): Response
+    public function recipients(Request $request, ConversationAccess $access): JsonResponse
+    {
+        $validated = $request->validate([
+            'q' => ['required', 'string', 'min:2', 'max:80', 'regex:/\A[^\x00]*\z/u'],
+        ]);
+        $viewer = $request->user();
+        $search = trim($validated['q']);
+        if (mb_strlen($search) < 2) {
+            return response()->json(['data' => []]);
+        }
+        $query = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search);
+        $recipients = User::query()->select(['id', 'name', 'email_verified_at', 'message_requests_enabled'])
+            ->where('id', '<>', $viewer->id)->whereNotNull('email_verified_at')
+            ->whereRaw("LOWER(name) LIKE LOWER(?) ESCAPE '!'", ['%'.$query.'%'])
+            ->where(function ($eligible) use ($viewer): void {
+                $eligible->where('message_requests_enabled', true)
+                    ->orWhereExists(function ($firstFollow) use ($viewer): void {
+                        $firstFollow->selectRaw('1')->from('follows as first_follow')
+                            ->whereColumn('first_follow.followed_id', 'users.id')
+                            ->where('first_follow.follower_id', $viewer->id)
+                            ->where('first_follow.status', 'approved')
+                            ->whereExists(function ($secondFollow) use ($viewer): void {
+                                $secondFollow->selectRaw('1')->from('follows as second_follow')
+                                    ->whereColumn('second_follow.follower_id', 'users.id')
+                                    ->where('second_follow.followed_id', $viewer->id)
+                                    ->where('second_follow.status', 'approved');
+                            });
+                    });
+
+                foreach ([ConversationRequest::Accepted, ConversationRequest::Pending] as $status) {
+                    $eligible->orWhereExists(function ($latest) use ($viewer, $status): void {
+                        $latest->selectRaw('1')->from('conversation_requests as lookup_request')
+                            ->where('lookup_request.status', $status)
+                            ->where(function ($pair) use ($viewer): void {
+                                $pair->where(function ($direction) use ($viewer): void {
+                                    $direction->where('lookup_request.requester_id', $viewer->id)
+                                        ->whereColumn('lookup_request.recipient_id', 'users.id');
+                                })->orWhere(function ($direction) use ($viewer): void {
+                                    $direction->whereColumn('lookup_request.requester_id', 'users.id')
+                                        ->where('lookup_request.recipient_id', $viewer->id);
+                                });
+                            })
+                            ->whereNotExists(function ($newer): void {
+                                $newer->selectRaw('1')->from('conversation_requests as newer_lookup_request')
+                                    ->whereColumn('newer_lookup_request.member_one_id', 'lookup_request.member_one_id')
+                                    ->whereColumn('newer_lookup_request.member_two_id', 'lookup_request.member_two_id')
+                                    ->whereColumn('newer_lookup_request.id', '>', 'lookup_request.id');
+                            });
+                    });
+                }
+
+                foreach ([ConversationRequest::Declined, ConversationRequest::Stopped] as $status) {
+                    $eligible->orWhereExists(function ($latest) use ($viewer, $status): void {
+                        $latest->selectRaw('1')->from('conversation_requests as lookup_request')
+                            ->where('lookup_request.status', $status)
+                            ->where('lookup_request.recipient_id', $viewer->id)
+                            ->whereColumn('lookup_request.requester_id', 'users.id')
+                            ->whereNull('lookup_request.reopened_at')
+                            ->whereNotExists(function ($newer): void {
+                                $newer->selectRaw('1')->from('conversation_requests as newer_lookup_request')
+                                    ->whereColumn('newer_lookup_request.member_one_id', 'lookup_request.member_one_id')
+                                    ->whereColumn('newer_lookup_request.member_two_id', 'lookup_request.member_two_id')
+                                    ->whereColumn('newer_lookup_request.id', '>', 'lookup_request.id');
+                            });
+                    });
+                }
+            })
+            ->orderByRaw('CASE WHEN EXISTS (SELECT 1 FROM follows WHERE follows.follower_id = ? AND follows.followed_id = users.id AND follows.status = ?) THEN 0 ELSE 1 END', [$viewer->id, 'approved'])
+            ->orderBy('name')->orderBy('id')->limit(5)->get()
+            ->map(function (User $member) use ($viewer, $access): array {
+                $latest = $access->latestRequest($viewer->id, $member->id);
+                $conversation = Conversation::query()->where('member_one_id', min($viewer->id, $member->id))
+                    ->where('member_two_id', max($viewer->id, $member->id))->first(['id']);
+
+                return [
+                    'id' => $member->id,
+                    'name' => $member->name,
+                    'canMessage' => $access->canSend($viewer, $member),
+                    'requestState' => $access->interactionMode($viewer, $member),
+                    'requestId' => $latest?->id,
+                    'conversationId' => $conversation?->id,
+                    'canReopen' => $latest?->recipient_id === $viewer->id && $access->interactionMode($viewer, $member) === 'reopen',
+                ];
+            })->values();
+
+        return response()->json(['data' => $recipients]);
+    }
+
+    public function show(Request $request, Conversation $conversation, ManageConversation $conversations, ManageConversationRequests $requests, ConversationAccess $access): Response
     {
         $viewer = $request->user();
-        $participant = app(ManageConversation::class)->participant($conversation, $viewer);
+        $participant = $conversations->participant($conversation, $viewer);
         $before = $request->validate(['before' => ['sometimes', 'integer', 'min:1']])['before'] ?? null;
         $query = $conversation->messages()->with('sender:id,name')->orderByDesc('id');
         if ($before !== null) {
@@ -44,13 +156,8 @@ class ConversationController extends Controller
             ->where('id', '>', $participant->last_read_message_id ?? 0)->count();
         $conversation->load(['memberOne:id,name,email_verified_at', 'memberTwo:id,name,email_verified_at']);
         $member = $conversation->member_one_id === $viewer->id ? $conversation->memberTwo : $conversation->memberOne;
-        $canSend = $viewer->hasVerifiedEmail()
-            && $conversation->memberOne->hasVerifiedEmail()
-            && $conversation->memberTwo->hasVerifiedEmail()
-            && DB::table('follows')->where('status', 'approved')->where(function ($query) use ($conversation): void {
-                $query->where(fn ($query) => $query->where('follower_id', $conversation->member_one_id)->where('followed_id', $conversation->member_two_id))
-                    ->orWhere(fn ($query) => $query->where('follower_id', $conversation->member_two_id)->where('followed_id', $conversation->member_one_id));
-            })->count() === 2;
+        $canSend = $access->canSend($viewer, $member);
+        $requestPermission = $access->requestPermission($viewer, $member);
 
         return $this->privatePage($request, 'messages/index', [
             'conversations' => $this->rail($viewer, $request->string('q')->trim()->limit(80)->toString()),
@@ -70,15 +177,77 @@ class ConversationController extends Controller
                 'nextBefore' => $hasOlder ? $messages->first()?->id : null,
                 'isLatestPage' => $before === null,
                 'canSend' => $canSend,
+                'requestPermission' => $requestPermission,
             ],
+            'selectedRecipient' => null,
+            'requests' => fn () => $this->requestPanel($viewer, $requests),
         ]);
     }
 
-    public function store(Request $request, User $member, ManageConversation $conversations): RedirectResponse
+    public function store(Request $request, User $member, ManageConversation $conversations, ConversationAccess $access): RedirectResponse
     {
+        $mode = $access->interactionMode($request->user(), $member);
+        if ($mode !== 'direct') {
+            abort_unless($mode !== 'unavailable', 404);
+
+            return to_route('messages.index', ['recipient' => $member->id]);
+        }
+
         $conversation = $conversations->start($request->user(), $member);
 
         return to_route('messages.show', $conversation);
+    }
+
+    public function sendRequest(Request $request, User $member, ManageConversationRequests $requests): RedirectResponse
+    {
+        $validated = $request->validate([
+            'body' => ['required', 'string', 'max:500', 'regex:/\A[^\x00]*\z/u'],
+            'nonce' => ['required', 'uuid'],
+        ]);
+        $result = $requests->initiate($request->user(), $member, $validated['body'], $validated['nonce']);
+
+        if ($result instanceof Conversation) {
+            return to_route('messages.show', $result);
+        }
+
+        if ($result->status === ConversationRequest::Accepted) {
+            $conversation = Conversation::query()->where('member_one_id', $result->member_one_id)
+                ->where('member_two_id', $result->member_two_id)->firstOrFail();
+
+            return to_route('messages.show', $conversation);
+        }
+
+        return to_route('messages.index', ['recipient' => $member->id]);
+    }
+
+    public function acceptRequest(Request $request, ConversationRequest $conversationRequest, ManageConversationRequests $requests): RedirectResponse
+    {
+        $result = $requests->respond($request->user(), $conversationRequest->id, true);
+        $conversation = Conversation::query()->where('member_one_id', $result->member_one_id)
+            ->where('member_two_id', $result->member_two_id)->firstOrFail();
+
+        return to_route('messages.show', $conversation);
+    }
+
+    public function declineRequest(Request $request, ConversationRequest $conversationRequest, ManageConversationRequests $requests): RedirectResponse
+    {
+        $requests->respond($request->user(), $conversationRequest->id, false);
+
+        return to_route('messages.index');
+    }
+
+    public function stopRequest(Request $request, ConversationRequest $conversationRequest, ManageConversationRequests $requests): RedirectResponse
+    {
+        $requests->stop($request->user(), $conversationRequest->id);
+
+        return to_route('messages.index');
+    }
+
+    public function reopenRequest(Request $request, ConversationRequest $conversationRequest, ManageConversationRequests $requests): RedirectResponse
+    {
+        $requests->reopen($request->user(), $conversationRequest->id);
+
+        return to_route('messages.index');
     }
 
     public function send(Request $request, Conversation $conversation, ManageConversation $conversations): RedirectResponse
@@ -141,6 +310,59 @@ class ConversationController extends Controller
                     'unreadCount' => (int) $participant->getAttribute('unread_count'),
                 ];
             });
+    }
+
+    /**
+     * @param  LengthAwarePaginator<int, ConversationRequest>  $page
+     * @return LengthAwarePaginator<int, array{
+     *     id: int,
+     *     member: array{id: int, name: string},
+     *     body: string,
+     *     expiresAt: string|null,
+     *     status: string|null,
+     *     canAccept: bool,
+     *     canDecline: bool,
+     *     canStop: bool,
+     *     canReopen: bool
+     * }>
+     */
+    private function requestItems(LengthAwarePaginator $page, User $viewer, ManageConversationRequests $requests): LengthAwarePaginator
+    {
+        return $page->through(function (ConversationRequest $item) use ($viewer, $requests): array {
+            $incoming = $item->recipient_id === $viewer->id;
+            $member = $incoming ? $item->requester : $item->recipient;
+            $status = $requests->effectiveStatus($item);
+            $active = $status === ConversationRequest::Pending;
+            $canReopen = $incoming && in_array($status, [ConversationRequest::Declined, ConversationRequest::Expired, ConversationRequest::Stopped], true)
+                && $item->reopened_at === null && $viewer->message_requests_enabled;
+
+            return [
+                'id' => $item->id,
+                'member' => ['id' => $member->id, 'name' => $member->name],
+                'body' => $item->body,
+                'expiresAt' => $item->expires_at->toISOString(),
+                'status' => $status,
+                'canAccept' => $incoming && $active,
+                'canDecline' => $incoming && $active,
+                'canStop' => $active || $status === ConversationRequest::Accepted,
+                'canReopen' => $canReopen,
+            ];
+        });
+    }
+
+    /** @return array{incomingCount: int, outgoingCount: int, incoming: LengthAwarePaginator<int, array{id: int, member: array{id: int, name: string}, body: string, expiresAt: string|null, status: string|null, canAccept: bool, canDecline: bool, canStop: bool, canReopen: bool}>, outgoing: LengthAwarePaginator<int, array{id: int, member: array{id: int, name: string}, body: string, expiresAt: string|null, status: string|null, canAccept: bool, canDecline: bool, canStop: bool, canReopen: bool}>} */
+    private function requestPanel(User $viewer, ManageConversationRequests $requests): array
+    {
+        $incoming = $requests->pageFor($viewer, true);
+        $outgoing = $requests->pageFor($viewer, false);
+        $counts = $requests->activePendingCounts($viewer);
+
+        return [
+            'incomingCount' => $counts['incoming'],
+            'outgoingCount' => $counts['outgoing'],
+            'incoming' => $this->requestItems($incoming, $viewer, $requests),
+            'outgoing' => $this->requestItems($outgoing, $viewer, $requests),
+        ];
     }
 
     /** @param array<string, mixed> $props */

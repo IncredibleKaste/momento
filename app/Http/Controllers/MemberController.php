@@ -2,34 +2,41 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Conversation;
 use App\Models\Follow;
 use App\Models\PhotoPost;
 use App\Models\User;
+use App\Services\ConversationAccess;
 use App\Services\PhotoAccess;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\Cursor;
-use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
 use UnexpectedValueException;
 
 class MemberController extends Controller
 {
-    public function show(Request $request, User $member, PhotoAccess $access): Response
+    public function show(Request $request, User $member, PhotoAccess $access, ConversationAccess $conversationAccess): Response
     {
         abort_unless($member->hasVerifiedEmail(), 404);
         $viewer = $request->user();
         $follow = Follow::query()->where('follower_id', $request->user()->id)
             ->where('followed_id', $member->id)->first();
-        $canMessage = ! $viewer->is($member) && DB::table('follows')->where('status', 'approved')->where(function ($query) use ($viewer, $member): void {
-            $query->where(fn ($query) => $query->where('follower_id', $viewer->id)->where('followed_id', $member->id))
-                ->orWhere(fn ($query) => $query->where('follower_id', $member->id)->where('followed_id', $viewer->id));
-        })->count() === 2;
+        $mode = $conversationAccess->interactionMode($viewer, $member);
+        $latestRequest = $conversationAccess->latestRequest($viewer->id, $member->id);
+        $conversation = Conversation::query()->where('member_one_id', min($viewer->id, $member->id))
+            ->where('member_two_id', max($viewer->id, $member->id))->first(['id']);
 
         $props = [
             'member' => ['id' => $member->id, 'name' => $member->name],
             'follow' => $follow ? ['id' => $follow->id, 'status' => $follow->status] : null,
-            'canMessage' => $canMessage,
+            'canMessage' => $mode === 'direct',
+            'messageAction' => [
+                'mode' => $mode,
+                'requestId' => $latestRequest?->id,
+                'conversationId' => $conversation?->id,
+                'canReopen' => $mode === 'reopen' && $latestRequest?->recipient_id === $viewer->id,
+            ],
         ];
 
         if ($access->allows($viewer, $member)) {
