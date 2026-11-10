@@ -3,6 +3,8 @@
 declare(strict_types=1);
 use Symfony\Component\Process\Process;
 
+require '/app/vendor/autoload.php';
+
 const FFMPEG_BIN = '/usr/bin/ffmpeg';
 const FFPROBE_BIN = '/usr/bin/ffprobe';
 const VIDEO_DECODER = '/usr/local/bin/conversation-video-decoder';
