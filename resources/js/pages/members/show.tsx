@@ -1,4 +1,5 @@
 import { Head, Link, usePage } from '@inertiajs/react';
+import { MessageCircle } from 'lucide-react';
 import { useState } from 'react';
 import FollowAction from '@/components/follow-action';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -26,22 +27,47 @@ type Props = {
     };
 };
 
+const photoBorderColors = [
+    '#648b49',
+    '#a8a24d',
+    '#d5ad4c',
+    '#d99046',
+    '#d07849',
+    '#bd5755',
+    '#b45c77',
+    '#966092',
+    '#7c69a5',
+    '#617fb0',
+    '#4d8da6',
+    '#50998a',
+    '#709f62',
+    '#b39c59',
+    '#c07d78',
+    '#8c7faa',
+];
+
 function ProfilePhoto({
     photo,
     memberName,
+    index,
 }: {
     photo: NonNullable<Props['photos']>['data'][number];
     memberName: string;
+    index: number;
 }) {
     const [failed, setFailed] = useState(false);
 
     return (
-        <li className="min-w-0 space-y-2">
+        <li className="min-w-0">
             <Link
                 href={photo.detailUrl}
                 prefetch={false}
                 aria-label={`Open photo from ${memberName}: ${photo.caption || 'Photo'}`}
-                className="group block aspect-square overflow-hidden rounded-md border border-border bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="block aspect-square overflow-hidden rounded-[5px] border-t-2 bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                style={{
+                    borderTopColor:
+                        photoBorderColors[index % photoBorderColors.length],
+                }}
             >
                 {failed ? (
                     <span
@@ -57,19 +83,12 @@ function ProfilePhoto({
                         loading="lazy"
                         decoding="async"
                         onError={() => setFailed(true)}
-                        className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
+                        className="h-full w-full object-cover"
                     />
                 )}
             </Link>
-            {photo.caption && (
-                <p className="line-clamp-3 text-sm break-words whitespace-pre-wrap">
-                    {photo.caption}
-                </p>
-            )}
-            <time
-                dateTime={photo.createdAt}
-                className="block text-xs text-muted-foreground"
-            >
+            {photo.caption && <p className="sr-only">{photo.caption}</p>}
+            <time dateTime={photo.createdAt} className="sr-only">
                 {new Date(photo.createdAt).toLocaleDateString()}
             </time>
         </li>
@@ -84,104 +103,98 @@ export default function Member({ member, follow, canMessage, photos }: Props) {
     return (
         <>
             <Head title={member.name} />
-            <section
-                aria-labelledby="profile-name"
-                className="max-w-xl space-y-8 py-10"
-            >
-                <nav aria-label="Profile navigation" className="flex gap-6">
-                    <Link
-                        href={dashboard()}
-                        className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
-                    >
-                        Home
-                    </Link>
-                    <Link
-                        href={index()}
-                        className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
-                    >
-                        Following
-                    </Link>
-                </nav>
-                <header className="flex items-center gap-5">
+            <section aria-labelledby="profile-name" className="min-w-0 pb-5">
+                <header className="flex items-start gap-[13px] py-[30px] min-[541px]:items-center min-[541px]:gap-[25px]">
                     <Avatar
                         aria-hidden="true"
-                        className="size-16 shrink-0 text-xl"
+                        className="size-[70px] shrink-0 border-0 bg-transparent font-serif text-[28px] min-[541px]:size-[104px] min-[541px]:text-4xl"
                     >
                         <AvatarFallback>{initials(member.name)}</AvatarFallback>
                     </Avatar>
-                    <h1
-                        id="profile-name"
-                        className="min-w-0 font-serif text-3xl break-words"
-                    >
-                        {member.name}
-                    </h1>
-                </header>
-                {own ? (
-                    <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">
-                            This is your profile. Share this page’s address so
-                            other Momento members can request to follow you.
-                        </p>
-                        <Link
-                            href={edit()}
-                            className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                    <div className="min-w-0 flex-1">
+                        <h1
+                            id="profile-name"
+                            className="font-serif text-[28px] leading-tight font-medium wrap-anywhere min-[541px]:text-[34px]"
                         >
-                            Edit profile
-                        </Link>
-                    </div>
-                ) : (
-                    <>
-                        <p className="text-sm text-muted-foreground">
-                            {follow?.status === 'approved'
-                                ? 'You follow this member.'
-                                : follow
-                                  ? 'Your request is waiting for approval.'
-                                  : 'Send a request to follow this member.'}
-                        </p>
-                        {follow?.status !== 'approved' && (
-                            <p className="text-sm text-muted-foreground">
-                                Photos and captions are private until this
-                                member approves your request.
-                            </p>
-                        )}
-                        {follow ? (
-                            <FollowAction
-                                form={destroy.form(follow.id)}
-                                label={
-                                    follow.status === 'approved'
-                                        ? 'Unfollow'
-                                        : 'Cancel request'
-                                }
-                                memberName={member.name}
-                                secondary
-                            />
+                            {member.name}
+                        </h1>
+                        {own ? (
+                            <div className="mt-2 space-y-2">
+                                <p className="text-xs leading-relaxed text-muted-foreground">
+                                    This is your profile. Share this page’s
+                                    address so other Momento members can request
+                                    to follow you.
+                                </p>
+                                <Link
+                                    href={edit()}
+                                    prefetch={false}
+                                    className="inline-flex min-h-11 items-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                >
+                                    Edit profile
+                                </Link>
+                            </div>
                         ) : (
-                            <FollowAction
-                                form={store.form(member.id)}
-                                label="Request to follow"
-                                memberName={member.name}
-                            />
+                            <div className="mt-2 space-y-2">
+                                <p className="text-xs leading-relaxed text-muted-foreground">
+                                    {follow?.status === 'approved'
+                                        ? 'You follow this member.'
+                                        : follow
+                                          ? 'Your request is waiting for approval.'
+                                          : 'Send a request to follow this member.'}
+                                </p>
+                                {follow?.status !== 'approved' && (
+                                    <p className="text-xs leading-relaxed text-muted-foreground">
+                                        Photos and captions are private until
+                                        this member approves your request.
+                                    </p>
+                                )}
+                                <div className="flex flex-wrap items-start gap-[7px] pt-1 min-[541px]:gap-2.5 min-[541px]:pt-2.5">
+                                    {follow ? (
+                                        <FollowAction
+                                            form={destroy.form(follow.id)}
+                                            label={
+                                                follow.status === 'approved'
+                                                    ? 'Unfollow'
+                                                    : 'Cancel request'
+                                            }
+                                            memberName={member.name}
+                                            secondary
+                                        />
+                                    ) : (
+                                        <FollowAction
+                                            form={store.form(member.id)}
+                                            label="Request to follow"
+                                            memberName={member.name}
+                                        />
+                                    )}
+                                    {canMessage && (
+                                        <Link
+                                            href={startMessage(member.id)}
+                                            method="post"
+                                            as="button"
+                                            prefetch={false}
+                                            className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-[5px] border border-border bg-card px-3 py-2 text-[13px] font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring min-[541px]:px-5"
+                                        >
+                                            <MessageCircle
+                                                aria-hidden="true"
+                                                className="size-[17px]"
+                                            />
+                                            Message
+                                        </Link>
+                                    )}
+                                </div>
+                            </div>
                         )}
-                        {canMessage && (
-                            <Link
-                                href={startMessage(member.id)}
-                                method="post"
-                                as="button"
-                                className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
-                            >
-                                Message
-                            </Link>
-                        )}
-                    </>
-                )}
+                    </div>
+                </header>
                 {photos && (
                     <section
                         aria-labelledby="profile-photos-heading"
-                        className="space-y-5"
+                        className="space-y-[18px] pt-[26px]"
                     >
                         <h2
                             id="profile-photos-heading"
-                            className="font-serif text-2xl sm:text-3xl"
+                            className="font-serif text-2xl leading-none font-medium"
                         >
                             Photos
                         </h2>
@@ -192,13 +205,14 @@ export default function Member({ member, follow, canMessage, photos }: Props) {
                         ) : (
                             <ul
                                 aria-label={`${member.name} photos`}
-                                className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3"
+                                className="grid grid-cols-2 gap-[5px] min-[541px]:grid-cols-3 min-[541px]:gap-1.5"
                             >
-                                {photos.data.map((photo) => (
+                                {photos.data.map((photo, index) => (
                                     <ProfilePhoto
                                         key={photo.id}
                                         photo={photo}
                                         memberName={member.name}
+                                        index={index}
                                     />
                                 ))}
                             </ul>
@@ -232,6 +246,25 @@ export default function Member({ member, follow, canMessage, photos }: Props) {
                         )}
                     </section>
                 )}
+                <nav
+                    aria-label="Profile navigation"
+                    className="mt-6 flex flex-wrap gap-6"
+                >
+                    <Link
+                        href={dashboard()}
+                        prefetch={false}
+                        className="inline-flex min-h-11 items-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    >
+                        Home
+                    </Link>
+                    <Link
+                        href={index()}
+                        prefetch={false}
+                        className="inline-flex min-h-11 items-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    >
+                        Following
+                    </Link>
+                </nav>
             </section>
         </>
     );
