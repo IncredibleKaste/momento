@@ -24,6 +24,7 @@ type Props = {
     decoderAvailable: boolean;
     retryKey?: string;
     initialCaption?: string;
+    initialLocation?: string;
 };
 
 export default function PhotoPostComposer({
@@ -31,6 +32,7 @@ export default function PhotoPostComposer({
     decoderAvailable,
     retryKey,
     initialCaption = '',
+    initialLocation = '',
 }: Props) {
     const [attempt, setAttempt] = useState(() =>
         newPhotoPostAttempt(retryKey ?? crypto.randomUUID()),
@@ -38,14 +40,20 @@ export default function PhotoPostComposer({
     const form = useForm({
         photo: null as File | null,
         caption: initialCaption,
+        location: initialLocation,
         idempotency_key: attempt.key,
     });
     const [requestError, setRequestError] = useState<string | null>(null);
     const [serverConflict, setServerConflict] = useState(false);
     const errorSummary = useRef<HTMLDivElement>(null);
     const currentSignature = useMemo(
-        () => attemptSignature(form.data.photo, form.data.caption),
-        [form.data.photo, form.data.caption],
+        () =>
+            attemptSignature(
+                form.data.photo,
+                form.data.caption,
+                form.data.location,
+            ),
+        [form.data.photo, form.data.caption, form.data.location],
     );
     const needsNewAttempt = requiresNewAttempt(
         attempt,
@@ -61,6 +69,10 @@ export default function PhotoPostComposer({
         form.data.caption,
         limits.maxCaptionCharacters,
     );
+    const locationOverLimit = captionExceedsLimit(
+        form.data.location,
+        limits.maxLocationCharacters,
+    );
     const photoError =
         errors.photo ??
         (fileOverLimit
@@ -71,8 +83,16 @@ export default function PhotoPostComposer({
         (captionOverLimit
             ? `Keep the caption to ${limits.maxCaptionCharacters} characters or fewer.`
             : undefined);
+    const locationError =
+        errors.location ??
+        (locationOverLimit
+            ? `Keep the location to ${limits.maxLocationCharacters} characters or fewer.`
+            : undefined);
     const hasFieldErrors =
-        Object.keys(errors).length > 0 || fileOverLimit || captionOverLimit;
+        Object.keys(errors).length > 0 ||
+        fileOverLimit ||
+        captionOverLimit ||
+        locationOverLimit;
 
     const focusErrorSummary = useCallback(() => {
         requestAnimationFrame(() => errorSummary.current?.focus());
@@ -100,7 +120,8 @@ export default function PhotoPostComposer({
             !decoderAvailable ||
             form.data.photo === null ||
             fileOverLimit ||
-            captionOverLimit
+            captionOverLimit ||
+            locationOverLimit
         )
             return;
 
@@ -117,7 +138,7 @@ export default function PhotoPostComposer({
             },
             onNetworkError: () => {
                 setRequestError(
-                    'The upload could not be confirmed. Retry with the same photo and caption, or start a new post if either has changed.',
+                    'The upload could not be confirmed. Retry with the same photo, caption, and location, or start a new post if any have changed.',
                 );
                 focusErrorSummary();
             },
@@ -164,7 +185,10 @@ export default function PhotoPostComposer({
                                 {requestError}
                             </p>
                         )}
-                        {(photoError || captionError || keyError) && (
+                        {(photoError ||
+                            captionError ||
+                            locationError ||
+                            keyError) && (
                             <ul className="mt-2 list-inside list-disc space-y-1">
                                 {photoError && (
                                     <li>
@@ -183,6 +207,16 @@ export default function PhotoPostComposer({
                                         </a>
                                     </li>
                                 )}
+                                {locationError && (
+                                    <li>
+                                        <a
+                                            className="underline"
+                                            href="#location"
+                                        >
+                                            {locationError}
+                                        </a>
+                                    </li>
+                                )}
                                 {keyError && !requestError && (
                                     <li>{keyError}</li>
                                 )}
@@ -197,8 +231,8 @@ export default function PhotoPostComposer({
                         className="rounded-md border border-border bg-muted/40 p-4 text-sm"
                     >
                         {serverConflict
-                            ? 'The server found different content for this upload key. Start a new post to submit this selected photo and caption.'
-                            : 'This photo or caption differs from the last attempt. Start a new post before submitting these changes.'}
+                            ? 'The server found different content for this upload key. Start a new post to submit this selected photo, caption, and location.'
+                            : 'This photo, caption, or location differs from the last attempt. Start a new post before submitting these changes.'}
                     </div>
                 )}
 
@@ -292,6 +326,51 @@ export default function PhotoPostComposer({
                             role="alert"
                         />
                     </div>
+
+                    <div className="space-y-2">
+                        <label
+                            htmlFor="location"
+                            className="text-sm font-medium"
+                        >
+                            Location{' '}
+                            <span className="text-muted-foreground">
+                                (optional)
+                            </span>
+                        </label>
+                        <Input
+                            id="location"
+                            name="location"
+                            type="text"
+                            value={form.data.location}
+                            aria-invalid={Boolean(locationError)}
+                            aria-describedby={
+                                locationError
+                                    ? 'location-help location-error'
+                                    : 'location-help'
+                            }
+                            onChange={(event) => {
+                                form.setData('location', event.target.value);
+                                form.clearErrors('location');
+                            }}
+                        />
+                        <div className="flex flex-wrap justify-between gap-2 text-sm text-muted-foreground">
+                            <p id="location-help">
+                                A label you enter yourself. GPS is not
+                                collected, and the label cannot be changed after
+                                publishing. Up to {limits.maxLocationCharacters}{' '}
+                                characters.
+                            </p>
+                            <p aria-live="polite">
+                                {captionCharacterCount(form.data.location)}/
+                                {limits.maxLocationCharacters}
+                            </p>
+                        </div>
+                        <InputError
+                            id="location-error"
+                            message={locationError}
+                            role="alert"
+                        />
+                    </div>
                 </fieldset>
 
                 {form.progress && form.processing && (
@@ -327,6 +406,7 @@ export default function PhotoPostComposer({
                             !form.data.photo ||
                             fileOverLimit ||
                             captionOverLimit ||
+                            locationOverLimit ||
                             needsNewAttempt
                         }
                         className="min-h-11"

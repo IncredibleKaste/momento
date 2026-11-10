@@ -37,6 +37,7 @@ it('deletes an owned ready post, immediately hides it, and retains a non-content
     $owner = User::factory()->create();
     $post = readyDeletionPhotoPost($owner, [
         'caption' => 'A private caption canary',
+        'location' => 'A private location canary',
         'processed_bytes_charged' => 73,
     ]);
     $key = $post->idempotency_key;
@@ -52,6 +53,7 @@ it('deletes an owned ready post, immediately hides it, and retains a non-content
     $post->refresh();
     expect($post->status)->toBe(PhotoPostStatus::Deleted)
         ->and($post->caption)->toBeNull()
+        ->and($post->location)->toBeNull()
         ->and($post->request_fingerprint)->toBe(str_repeat('0', 64))
         ->and($post->idempotency_key)->toBe($key)
         ->and($post->deleted_at)->not->toBeNull()

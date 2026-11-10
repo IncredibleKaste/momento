@@ -2,6 +2,7 @@ export type PhotoPostLimits = {
     maxInputBytes: number;
     maxPixels: number;
     maxCaptionCharacters: number;
+    maxLocationCharacters: number;
     accept: string[];
 };
 
@@ -18,6 +19,7 @@ export type PhotoPost = {
     id: number;
     status: PhotoPostStatus;
     caption: string | null;
+    location: string | null;
     mediaUrl: string | null;
     canDelete: boolean;
     canCancel: boolean;
@@ -27,7 +29,7 @@ export type PhotoPost = {
 };
 
 export const photoPostConflictMessage =
-    'This upload key is already linked to different photo or caption details. Start a new post to submit changed content.';
+    'This upload key is already linked to different photo, caption, or location details. Start a new post to submit changed content.';
 
 export type PhotoPostAttempt = {
     key: string;
@@ -45,13 +47,18 @@ export function recordPhotoPostAttempt(
     return { ...attempt, submittedSignature: signature };
 }
 
-export function attemptSignature(photo: File | null, caption: string) {
+export function attemptSignature(
+    photo: File | null,
+    caption: string,
+    location = '',
+) {
     return JSON.stringify([
         photo?.name ?? null,
         photo?.size ?? null,
         photo?.lastModified ?? null,
         photo?.type ?? null,
         caption,
+        location,
     ]);
 }
 

@@ -19,8 +19,10 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ManagePhotoPosts
 {
-    public function submit(User $owner, UploadedFile $photo, ?string $caption, string $idempotencyKey): PhotoPost
+    public function submit(User $owner, UploadedFile $photo, ?string $caption, string $idempotencyKey, ?string $location = null): PhotoPost
     {
+        $location = $location === null ? null : trim($location);
+        $location = $location === '' ? null : $location;
         $bytes = $photo->getSize();
         if (! is_int($bytes) || $bytes < 1 || $bytes > config('photo_processing.max_input_bytes')) {
             throw ValidationException::withMessages(['photo' => 'Choose a photo no larger than 20 MB.']);
@@ -35,14 +37,18 @@ class ManagePhotoPosts
         if (! is_string($contentHash)) {
             throw new PhotoDecoderException(PhotoPostFailure::StorageUnavailable);
         }
-        $fingerprint = hash('sha256', $contentHash."\0".($caption ?? ''));
+        $fingerprintInput = $contentHash."\0".($caption ?? '');
+        if ($location !== null) {
+            $fingerprintInput .= "\0".$location;
+        }
+        $fingerprint = hash('sha256', $fingerprintInput);
 
         $attemptToken = (string) Str::uuid();
         $disk = Storage::disk('photo_posts');
         $rawKey = $attemptToken.'/original';
         $outputKey = $attemptToken.'/processed.webp';
 
-        $post = DB::transaction(function () use ($owner, $idempotencyKey, $fingerprint, $attemptToken, $rawKey, $outputKey, $bytes, $caption): PhotoPost {
+        $post = DB::transaction(function () use ($owner, $idempotencyKey, $fingerprint, $attemptToken, $rawKey, $outputKey, $bytes, $caption, $location): PhotoPost {
             DB::table('photo_upload_capacity')->where('id', 1)->lockForUpdate()->first();
             $lockedOwner = User::query()->lockForUpdate()->findOrFail($owner->id);
             $existing = PhotoPost::query()->where('user_id', $lockedOwner->id)
@@ -53,7 +59,7 @@ class ManagePhotoPosts
                     throw new HttpException(409, 'This photo post was removed. Start a new post with a new upload key.');
                 }
                 if (! hash_equals($existing->request_fingerprint, $fingerprint)) {
-                    throw new HttpException(409, 'This retry key belongs to different photo or caption content.');
+                    throw new HttpException(409, 'This retry key belongs to different photo, caption, or location content.');
                 }
                 if (! $existing->status->isFailedOrCancelled()) {
                     return $existing;
@@ -61,7 +67,7 @@ class ManagePhotoPosts
                 if ($existing->cleanup_completed_at === null || $existing->staging_bytes_charged !== 0
                     || $existing->processed_bytes_charged !== 0) {
                     throw ValidationException::withMessages([
-                        'photo' => 'Cleanup is still pending. Retry shortly with the same photo and caption.',
+                        'photo' => 'Cleanup is still pending. Retry shortly with the same photo, caption, and location.',
                     ]);
                 }
             }
@@ -96,6 +102,7 @@ class ManagePhotoPosts
                     'attempt_token' => $attemptToken,
                     'status' => PhotoPostStatus::Staging,
                     'caption' => $caption,
+                    'location' => $location,
                     'raw_key' => $rawKey,
                     'output_key' => $outputKey,
                     'input_bytes' => $bytes,
@@ -118,6 +125,7 @@ class ManagePhotoPosts
                 'attempt_token' => $attemptToken,
                 'status' => PhotoPostStatus::Staging,
                 'caption' => $caption,
+                'location' => $location,
                 'raw_key' => $rawKey,
                 'output_key' => $outputKey,
                 'input_bytes' => $bytes,
@@ -226,6 +234,7 @@ class ManagePhotoPosts
             $current->update([
                 'status' => PhotoPostStatus::Deleted,
                 'caption' => null,
+                'location' => null,
                 'request_fingerprint' => str_repeat('0', 64),
                 'deleted_at' => now(),
                 'cleanup_due_at' => now(),

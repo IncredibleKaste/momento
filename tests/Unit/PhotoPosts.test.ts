@@ -24,6 +24,7 @@ function photoPost(overrides: Partial<PhotoPost> = {}): PhotoPost {
         id: 7,
         status: 'queued',
         caption: null,
+        location: null,
         mediaUrl: null,
         canDelete: false,
         canCancel: false,
@@ -57,7 +58,7 @@ it('keeps the key for an unchanged retry and requires an explicit new attempt af
     expect(requiresNewAttempt(explicitNewAttempt, signature)).toBe(false);
 });
 
-it('changes the draft signature when the photo identity or caption changes', () => {
+it('changes the draft signature when the photo identity, caption, or location changes', () => {
     const original = attemptSignature(samplePhoto, 'At the lake');
     const anotherPhoto = new File(
         [new Uint8Array(samplePhoto.size + 1)],
@@ -68,6 +69,9 @@ it('changes the draft signature when the photo identity or caption changes', () 
     expect(attemptSignature(samplePhoto, 'At the lake')).toBe(original);
     expect(attemptSignature(anotherPhoto, 'At the lake')).not.toBe(original);
     expect(attemptSignature(samplePhoto, 'Different caption')).not.toBe(
+        original,
+    );
+    expect(attemptSignature(samplePhoto, 'At the lake', 'Zürich')).not.toBe(
         original,
     );
 });

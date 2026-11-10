@@ -39,6 +39,7 @@ class DashboardController extends Controller
                 'photo_posts.id',
                 'photo_posts.user_id',
                 'photo_posts.caption',
+                'photo_posts.location',
                 'photo_posts.created_at',
             ], 'postsCursor');
 
@@ -53,6 +54,7 @@ class DashboardController extends Controller
         $posts = $photoPosts->getCollection()->map(fn (PhotoPost $post): array => [
             'id' => $post->id,
             'caption' => $post->caption,
+            'location' => $post->location,
             'createdAt' => $post->created_at->toIso8601String(),
             'author' => [
                 'id' => $post->user->id,

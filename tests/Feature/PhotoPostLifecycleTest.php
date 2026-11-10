@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
     $directory = storage_path('framework/testing/photo-decoder-'.Str::random(12));
@@ -80,16 +81,26 @@ function setPhotoDecoderOutput(string $directory, string $output): void
     chmod($script, 0700);
 }
 
+it('provides the optional location character limit to the composer', function () {
+    $this->actingAs(User::factory()->create())
+        ->get(route('photo-posts.create'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('photo-posts/create')
+            ->where('limits.maxLocationCharacters', 100));
+});
+
 it('stores one private staging object and reuses or conflicts on the idempotency key', function () {
     $owner = User::factory()->create();
     $key = (string) Str::uuid();
     $payload = photoPostUpload();
     $payload['idempotency_key'] = $key;
+    $payload['location'] = str_repeat('🌲', 100);
 
     $first = $this->actingAs($owner)->post(route('photo-posts.store'), $payload)->assertRedirect();
     $post = PhotoPost::sole();
     expect($first->headers->get('Location'))->toBe(route('photo-posts.show', $post));
     expect($post->status)->toBe(PhotoPostStatus::Queued)
+        ->and($post->location)->toBe(str_repeat('🌲', 100))
         ->and($post->staging_bytes_charged)->toBeGreaterThan(0)
         ->and($post->raw_key)->toMatch('/^[0-9a-f-]{36}\/original$/');
     Storage::disk('photo_posts')->assertExists($post->raw_key);
@@ -98,16 +109,19 @@ it('stores one private staging object and reuses or conflicts on the idempotency
 
     $retry = photoPostUpload();
     $retry['idempotency_key'] = $key;
+    $retry['location'] = str_repeat('🌲', 100);
     $this->post(route('photo-posts.store'), $retry)->assertRedirect(route('photo-posts.show', $post));
     expect(PhotoPost::count())->toBe(1);
 
     config(['photo_processing.decoder_executable' => null]);
     $sameRetry = photoPostUpload();
     $sameRetry['idempotency_key'] = $key;
+    $sameRetry['location'] = str_repeat('🌲', 100);
     $this->post(route('photo-posts.store'), $sameRetry)->assertRedirect(route('photo-posts.show', $post));
 
     $conflict = photoPostUpload('A quiet morning ');
     $conflict['idempotency_key'] = $key;
+    $conflict['location'] = str_repeat('🌲', 99).'🌳';
     $this->post(route('photo-posts.store'), $conflict)->assertStatus(409);
     expect(PhotoPost::count())->toBe(1);
 });
@@ -132,7 +146,7 @@ it('keeps the same retry key when cleanup is pending and reuses it after verifie
     $payload['idempotency_key'] = $key;
 
     $this->actingAs($owner)->post(route('photo-posts.store'), $payload)
-        ->assertSessionHasErrors(['photo' => 'Cleanup is still pending. Retry shortly with the same photo and caption.']);
+        ->assertSessionHasErrors(['photo' => 'Cleanup is still pending. Retry shortly with the same photo, caption, and location.']);
     expect(PhotoPost::count())->toBe(1)
         ->and($post->fresh()->status)->toBe(PhotoPostStatus::Failed)
         ->and($post->fresh()->attempt_token)->toBe($originalToken)
@@ -151,6 +165,34 @@ it('keeps the same retry key when cleanup is pending and reuses it after verifie
         ->and($post->fresh()->attempt_token)->not->toBe($originalToken)
         ->and($post->fresh()->staging_bytes_charged)->toBeGreaterThan(0)
         ->and($post->fresh()->processed_bytes_charged)->toBe(0);
+});
+
+it('retries the same failed location draft without changing its metadata', function () {
+    $owner = User::factory()->create();
+    $payload = photoPostUpload('A quiet morning');
+    $payload['location'] = 'Near the lake';
+    $key = (string) Str::uuid();
+    $inputHash = hash_file('sha256', $payload['photo']->getRealPath());
+    $fingerprint = hash('sha256', $inputHash."\0".$payload['caption']."\0".$payload['location']);
+    $post = PhotoPost::factory()->for($owner)->create([
+        'idempotency_key' => $key,
+        'request_fingerprint' => $fingerprint,
+        'status' => PhotoPostStatus::Failed,
+        'caption' => $payload['caption'],
+        'location' => $payload['location'],
+        'staging_bytes_charged' => 0,
+        'processed_bytes_charged' => 0,
+        'cleanup_completed_at' => now(),
+    ]);
+    $originalToken = $post->attempt_token;
+    $payload['idempotency_key'] = $key;
+
+    $this->actingAs($owner)->post(route('photo-posts.store'), $payload)
+        ->assertRedirect(route('photo-posts.show', $post));
+
+    expect($post->fresh()->status)->toBe(PhotoPostStatus::Queued)
+        ->and($post->fresh()->location)->toBe('Near the lake')
+        ->and($post->fresh()->attempt_token)->not->toBe($originalToken);
 });
 
 it('publishes only after bounded decoder output inspection and verified raw deletion', function () {
@@ -360,6 +402,35 @@ it('rejects NUL in captions before admission while preserving ordinary newlines'
     $this->post(route('photo-posts.store'), $valid)->assertRedirect();
 
     expect(PhotoPost::sole()->caption)->toBe($caption);
+});
+
+it('rejects invalid location labels before photo admission', function (mixed $location, string $message) {
+    $payload = photoPostUpload();
+    $payload['location'] = $location;
+    $payload['idempotency_key'] = (string) Str::uuid();
+
+    $this->actingAs(User::factory()->create())
+        ->from(route('photo-posts.create'))
+        ->post(route('photo-posts.store'), $payload)
+        ->assertRedirect(route('photo-posts.create'))
+        ->assertSessionHasErrors(['location' => $message]);
+
+    expect(PhotoPost::count())->toBe(0)
+        ->and(Storage::disk('photo_posts')->allFiles())->toBe([]);
+})->with([
+    'over 100 unicode characters' => [str_repeat('🌲', 101), 'The location field must not be greater than 100 characters.'],
+    'non-string input' => [['somewhere'], 'The location field must be a string.'],
+    'embedded null byte' => ["Place\0name", 'The location field format is invalid.'],
+]);
+
+it('normalizes a blank location to no stored label', function () {
+    $payload = photoPostUpload();
+    $payload['location'] = '   ';
+    $payload['idempotency_key'] = (string) Str::uuid();
+
+    $this->actingAs(User::factory()->create())->post(route('photo-posts.store'), $payload)->assertRedirect();
+
+    expect(PhotoPost::sole()->location)->toBeNull();
 });
 
 it('projects an owner retry key only when cleanup and decoder conditions are satisfied', function () {

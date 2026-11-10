@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from '@inertiajs/react';
 import { MessageCircle } from 'lucide-react';
 import BookmarkButton from '@/components/bookmark-button';
+import PhotoPostTime from '@/components/photo-post-time';
 import PhotoLikeButton from '@/components/photo-like-button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useInitials } from '@/hooks/use-initials';
@@ -10,6 +11,7 @@ import { show as profile } from '@/routes/members';
 export type PhotoCardPost = {
     id: number;
     caption: string | null;
+    location: string | null;
     createdAt: string;
     author: { id: number; name: string };
     mediaUrl: string;
@@ -71,18 +73,11 @@ export default function PhotoPostCard({ post }: { post: PhotoCardPost }) {
                         {post.author.name}
                     </span>
                 </Link>
-                <time
+                <PhotoPostTime
                     className="feed-post-time"
-                    dateTime={post.createdAt}
-                    title={new Date(post.createdAt).toLocaleString()}
-                >
-                    {new Date(post.createdAt).toLocaleString(undefined, {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                    })}
-                </time>
+                    createdAt={post.createdAt}
+                    compact
+                />
             </header>
             <Link
                 href={post.detailUrl}
@@ -132,6 +127,11 @@ export default function PhotoPostCard({ post }: { post: PhotoCardPost }) {
                             {post.author.name}
                         </Link>{' '}
                         {post.caption}
+                    </p>
+                )}
+                {post.location && (
+                    <p className="mt-2 text-xs wrap-anywhere whitespace-pre-wrap text-muted-foreground">
+                        {post.location}
                     </p>
                 )}
             </div>
