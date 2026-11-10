@@ -13,6 +13,8 @@ use App\Http\Responses\FailedPasswordResetResponse;
 use App\Http\Responses\LogoutResponse;
 use App\Http\Responses\PasswordResetLinkResponse;
 use App\Http\Responses\RegisterResponse;
+use App\Models\User;
+use App\Services\OidcAuthentication;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Http\Request;
@@ -60,7 +62,7 @@ class FortifyServiceProvider extends ServiceProvider
         $this->configureViews();
         $this->configureRateLimiting();
 
-        Passkeys::authorizeLoginUsing(fn (Request $request, PasskeyUser $user): bool => filled($user->getAuthPassword()));
+        Passkeys::authorizeLoginUsing(fn (Request $request, PasskeyUser $user): bool => $user instanceof User && filled($user->getAuthPassword()) && $user->disabled_at === null);
     }
 
     /**
@@ -78,6 +80,8 @@ class FortifyServiceProvider extends ServiceProvider
     private function configureViews(): void
     {
         Fortify::loginView(fn (Request $request) => Inertia::render('auth/login', [
+            'canGoogleLogin' => app(OidcAuthentication::class)->providerEnabled('google'),
+            'canSwitchLogin' => app(OidcAuthentication::class)->providerEnabled('switch'),
             'canResetPassword' => Features::enabled(Features::resetPasswords()),
             'status' => $request->session()->get('status'),
         ]));

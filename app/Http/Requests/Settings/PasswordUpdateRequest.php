@@ -10,6 +10,11 @@ class PasswordUpdateRequest extends FormRequest
 {
     use PasswordValidationRules;
 
+    public function authorize(): bool
+    {
+        return filled($this->user()->password) && $this->user()->disabled_at === null;
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *

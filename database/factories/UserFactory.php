@@ -38,6 +38,11 @@ class UserFactory extends Factory
         ];
     }
 
+    public function passwordless(): static
+    {
+        return $this->state(fn (array $attributes) => ['password' => null]);
+    }
+
     /**
      * Indicate that the model's email address should be unverified.
      */
