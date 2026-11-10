@@ -45,6 +45,7 @@ class MemberController extends Controller
                 ->cursorPaginate(12, [
                     'photo_posts.id',
                     'photo_posts.caption',
+                    'photo_posts.location',
                     'photo_posts.created_at',
                 ], 'cursor', $cursor);
 
@@ -52,6 +53,7 @@ class MemberController extends Controller
                 'data' => collect($photoPage->items())->map(static fn (PhotoPost $post): array => [
                     'id' => (int) $post->id,
                     'caption' => $post->caption,
+                    'location' => $post->location,
                     'createdAt' => $post->created_at?->toIso8601String(),
                     'mediaUrl' => route('photo-posts.media', $post->id),
                     'detailUrl' => route('photo-posts.show', $post->id),

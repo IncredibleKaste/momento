@@ -33,6 +33,7 @@ it('rechecks approval for copied photo URLs including head and range requests', 
     $post = PhotoPost::factory()->for($follow->followed)->create([
         'status' => PhotoPostStatus::Ready,
         'caption' => 'A private caption canary',
+        'location' => 'A private location canary',
     ]);
     $disk = Storage::fake('photo_posts');
     $disk->put($post->output_key, 'private processed photo bytes');
@@ -46,7 +47,7 @@ it('rechecks approval for copied photo URLs including head and range requests', 
     $this->withHeader('Range', 'bytes=0-3')->get($url)
         ->assertNotFound()->assertDontSee('private processed photo bytes');
     $this->withoutHeader('Range')->getJson(route('photo-posts.show', $post))
-        ->assertNotFound()->assertDontSee('A private caption canary');
+        ->assertNotFound()->assertDontSee('A private caption canary')->assertDontSee('A private location canary');
     $disk->assertExists($post->output_key);
 });
 
@@ -68,6 +69,7 @@ it('keeps unfinished photo captions and status owner-only even after follow appr
     $post = PhotoPost::factory()->for($follow->followed)->create([
         'status' => $status,
         'caption' => 'Private unfinished caption',
+        'location' => 'Private unfinished location',
     ]);
 
     $this->actingAs($follow->followed)->get(route('photo-posts.show', $post))
@@ -76,13 +78,14 @@ it('keeps unfinished photo captions and status owner-only even after follow appr
             ->where('photoPost.id', $post->id)
             ->where('photoPost.status', $status->value)
             ->where('photoPost.caption', 'Private unfinished caption')
+            ->where('photoPost.location', 'Private unfinished location')
             ->missing('photoPost.raw_key')
             ->missing('photoPost.output_key')
             ->missing('photoPost.request_fingerprint')
             ->missing('photoPost.attempt_token')
             ->missing('photoPost.idempotency_key'));
     $this->actingAs($follow->follower)->getJson(route('photo-posts.show', $post))
-        ->assertNotFound()->assertDontSee('Private unfinished caption');
+        ->assertNotFound()->assertDontSee('Private unfinished caption')->assertDontSee('Private unfinished location');
     $this->get(route('photo-posts.media', $post))->assertNotFound();
 })->with([
     'queued' => PhotoPostStatus::Queued,

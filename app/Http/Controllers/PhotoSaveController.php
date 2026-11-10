@@ -32,6 +32,7 @@ class PhotoSaveController extends Controller
             ->paginate(12, [
                 'photo_posts.id as id',
                 'photo_posts.caption as caption',
+                'photo_posts.location as location',
                 'photo_posts.created_at as created_at',
                 'authors.id as author_id',
                 'authors.name as author_name',
@@ -42,6 +43,7 @@ class PhotoSaveController extends Controller
         $savedPosts->through(static fn (stdClass $post): array => [
             'id' => (int) $post->id,
             'caption' => $post->caption,
+            'location' => $post->location,
             'author' => ['id' => (int) $post->author_id, 'name' => (string) $post->author_name],
             'revision' => (int) $post->revision,
             'createdAt' => Carbon::parse($post->created_at)->toIso8601String(),

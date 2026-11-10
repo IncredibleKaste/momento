@@ -35,7 +35,11 @@ it('matches literal captions only within currently visible ready photos', functi
     Follow::factory()->approved()->create(['follower_id' => $reverse->id, 'followed_id' => $viewer->id]);
     Follow::factory()->approved()->create(['follower_id' => $viewer->id, 'followed_id' => $unverified->id]);
     $own = PhotoPost::factory()->for($viewer)->create(['status' => PhotoPostStatus::Ready, 'caption' => 'Mountain morning', 'created_at' => now()->subMinute()]);
-    $visible = PhotoPost::factory()->for($approved)->create(['status' => PhotoPostStatus::Ready, 'caption' => '<b>Mountain afternoon</b>']);
+    $visible = PhotoPost::factory()->for($approved)->create([
+        'status' => PhotoPostStatus::Ready,
+        'caption' => '<b>Mountain afternoon</b>',
+        'location' => 'Mountain',
+    ]);
     foreach ([$pending, $reverse, $unverified, User::factory()->create()] as $hiddenAuthor) {
         PhotoPost::factory()->for($hiddenAuthor)->create(['status' => PhotoPostStatus::Ready, 'caption' => 'Mountain hidden']);
     }
@@ -43,7 +47,13 @@ it('matches literal captions only within currently visible ready photos', functi
         PhotoPost::factory()->for($approved)->create(['status' => $status, 'caption' => 'Mountain unavailable']);
     }
     PhotoPost::factory()->for($approved)->create(['status' => PhotoPostStatus::Ready, 'caption' => null]);
-    PhotoPost::factory()->for($approved)->create(['status' => PhotoPostStatus::Ready, 'caption' => 'Unrelated', 'raw_key' => 'location/Mountain', 'output_key' => 'metadata/Mountain']);
+    PhotoPost::factory()->for($approved)->create([
+        'status' => PhotoPostStatus::Ready,
+        'caption' => 'Unrelated',
+        'location' => 'Mountain',
+        'raw_key' => 'location/Mountain',
+        'output_key' => 'metadata/Mountain',
+    ]);
 
     $response = $this->actingAs($viewer)->get(route('people.index', ['q' => '  mOuNtAiN  ']));
     $response->assertHeader('Cache-Control', 'no-store, private')->assertInertia(fn (Assert $page) => $page
@@ -53,6 +63,7 @@ it('matches literal captions only within currently visible ready photos', functi
         ->where('photos.data.0', [
             'id' => $visible->id,
             'caption' => '<b>Mountain afternoon</b>',
+            'location' => 'Mountain',
             'createdAt' => $visible->created_at->toIso8601String(),
             'author' => ['id' => $approved->id, 'name' => 'Mountain author'],
             'mediaUrl' => route('photo-posts.media', $visible),

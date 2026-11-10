@@ -2,6 +2,7 @@ import { Head, Link, usePage } from '@inertiajs/react';
 import { MessageCircle } from 'lucide-react';
 import { useState } from 'react';
 import FollowAction from '@/components/follow-action';
+import PhotoPostTime from '@/components/photo-post-time';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useInitials } from '@/hooks/use-initials';
 import { dashboard } from '@/routes';
@@ -18,7 +19,8 @@ type Props = {
         data: {
             id: number;
             caption: string | null;
-            createdAt: string;
+            location: string | null;
+            createdAt: string | null;
             mediaUrl: string;
             detailUrl: string;
         }[];
@@ -88,9 +90,16 @@ function ProfilePhoto({
                 )}
             </Link>
             {photo.caption && <p className="sr-only">{photo.caption}</p>}
-            <time dateTime={photo.createdAt} className="sr-only">
-                {new Date(photo.createdAt).toLocaleDateString()}
-            </time>
+            {(photo.location || photo.createdAt) && (
+                <div className="space-y-1 px-1 py-2 text-xs text-muted-foreground">
+                    {photo.location && (
+                        <p className="wrap-anywhere whitespace-pre-wrap">
+                            {photo.location}
+                        </p>
+                    )}
+                    <PhotoPostTime createdAt={photo.createdAt} />
+                </div>
+            )}
         </li>
     );
 }
