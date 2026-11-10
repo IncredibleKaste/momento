@@ -315,6 +315,7 @@ function reproduceOrdinaryFixtureTranscode(string $input, int $probeStartedAt): 
         '-nostdin',
         '-hide_banner',
         '-loglevel', 'error',
+        '-filter_threads', '2',
         '-xerror',
         '-n',
         '-protocol_whitelist', 'file',
