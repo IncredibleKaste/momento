@@ -241,7 +241,7 @@ function decodeFixture(string $input, string $output, ?int $probeStartedAt = nul
             }
             if ($probeStartedAt !== null && $diagnostic['phase'] === 'transcode') {
                 $reproduction = reproduceOrdinaryFixtureTranscode($input, $probeStartedAt);
-                $message .= ' Synthetic-only FFmpeg reproduction: '.$reproduction;
+                $message .= ' Synthetic-only 2 GiB address-space control: '.$reproduction;
             }
             $message .= '.';
         }
@@ -300,7 +300,7 @@ function decodeFixture(string $input, string $output, ?int $probeStartedAt = nul
 
 /**
  * Reproduce only the first generated ordinary fixture's transcode failure.
- * This intentionally mirrors the native helper command and its process caps.
+ * Keep the helper's arguments and other caps, changing only address space.
  */
 function reproduceOrdinaryFixtureTranscode(string $input, int $probeStartedAt): string
 {
@@ -357,7 +357,7 @@ function reproduceOrdinaryFixtureTranscode(string $input, int $probeStartedAt): 
         '86s',
         '/usr/bin/prlimit',
         '--fsize=25000000:25000000',
-        '--as=1073741824:1073741824',
+        '--as=2147483648:2147483648',
         '--cpu=80:85',
         '--',
         ...$arguments,
