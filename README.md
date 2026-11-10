@@ -4,7 +4,7 @@ Momento is a photo-sharing application in development. The intended community al
 
 ## Current state
 
-The application includes local authentication, two-factor authentication, passkeys, account settings, approved follows, display-name people search and mutual-follow text chat. Authorized home and profile photo pages connect to private photo detail, likes, saves, bounded comments and owner deletion. Account email is read-only and whole-account deletion is disabled.
+The application includes local authentication, two-factor authentication, passkeys, account settings, approved follows, display-name people search, caption-only photo search and mutual-follow text chat. Authorized home and profile photo pages connect to private photo detail, likes, saves, bounded comments and owner deletion. Account email is read-only and whole-account deletion is disabled.
 
 Photo publishing remains unavailable until a qualified isolated decoder is configured. External identity providers, message attachments and message requests remain outside the integrated feature set. Source and runtime checks do not establish deployment, live provider or recovery acceptance.
 
