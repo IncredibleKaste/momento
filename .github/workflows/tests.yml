@@ -122,6 +122,7 @@ jobs:
             tests/Feature/PhotoDetailTest.php \
             tests/Feature/PhotoFeedTest.php \
             tests/Feature/ProfilePhotoTest.php \
+            tests/Feature/PhotoCaptionSearchTest.php \
             tests/Feature/PhotoPostDeletionTest.php
 
       - name: Check photo likes with PostgreSQL

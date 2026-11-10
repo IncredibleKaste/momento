@@ -22,7 +22,7 @@ class PeopleSearchRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'q' => 'display name',
+            'q' => 'search term',
         ];
     }
 }
