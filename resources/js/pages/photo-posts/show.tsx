@@ -1,6 +1,7 @@
 import { Head, Link, router, usePoll } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import BookmarkButton from '@/components/bookmark-button';
+import PhotoPostTime from '@/components/photo-post-time';
 import { PhotoCommentsPanel } from '@/components/photo-comments-panel';
 import PhotoLikeButton from '@/components/photo-like-button';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ type Props = {
     detail: {
         author: { id: number; name: string };
         createdAt: string | null;
+        location: string | null;
         likeState: { liked: boolean; revision: number };
         saveState: { saved: boolean; revision: number };
     } | null;
@@ -192,17 +194,10 @@ function PhotoPostPage({ photoPost, limits, detail }: Props) {
                                 >
                                     {detail.author.name}
                                 </Link>
-                                {detail.createdAt && (
-                                    <time
-                                        dateTime={detail.createdAt}
-                                        className="text-sm text-muted-foreground"
-                                    >
-                                        {new Intl.DateTimeFormat(undefined, {
-                                            dateStyle: 'medium',
-                                            timeStyle: 'short',
-                                        }).format(new Date(detail.createdAt))}
-                                    </time>
-                                )}
+                                <PhotoPostTime
+                                    createdAt={detail.createdAt}
+                                    className="text-sm text-muted-foreground"
+                                />
                             </header>
                         )}
                         <ReadyPhotoImage
@@ -216,6 +211,11 @@ function PhotoPostPage({ photoPost, limits, detail }: Props) {
                         {photoPost.caption && (
                             <p className="p-4 break-words whitespace-pre-wrap">
                                 {photoPost.caption}
+                            </p>
+                        )}
+                        {detail?.location && (
+                            <p className="px-4 pb-4 text-sm wrap-anywhere whitespace-pre-wrap text-muted-foreground">
+                                {detail.location}
                             </p>
                         )}
                         {detail && (
@@ -334,8 +334,8 @@ function PhotoPostPage({ photoPost, limits, detail }: Props) {
                             <h2 className="font-medium">Retry this photo</h2>
                             <p className="text-sm text-muted-foreground">
                                 Select the same original photo and keep the
-                                caption unchanged. To use different content,
-                                start a new post.
+                                caption and location unchanged. To use different
+                                content, start a new post.
                             </p>
                         </div>
                         <PhotoPostComposer
@@ -343,6 +343,7 @@ function PhotoPostPage({ photoPost, limits, detail }: Props) {
                             decoderAvailable
                             retryKey={retryKey}
                             initialCaption={photoPost.caption ?? ''}
+                            initialLocation={photoPost.location ?? ''}
                         />
                     </section>
                 )}

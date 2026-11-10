@@ -42,6 +42,7 @@ it('returns only the current member’s ready own and approved-follow photos', f
     $approvedPost = PhotoPost::factory()->for($approved)->create([
         'status' => PhotoPostStatus::Ready,
         'caption' => '<script>plain text only</script>',
+        'location' => '<script>location canary</script>',
         'created_at' => now(),
     ]);
     PhotoPost::factory()->for($pending)->create(['status' => PhotoPostStatus::Ready]);
@@ -58,6 +59,7 @@ it('returns only the current member’s ready own and approved-follow photos', f
                 [
                     'id' => $approvedPost->id,
                     'caption' => '<script>plain text only</script>',
+                    'location' => '<script>location canary</script>',
                     'createdAt' => $approvedPost->created_at->toIso8601String(),
                     'author' => ['id' => $approved->id, 'name' => 'Approved author'],
                     'mediaUrl' => route('photo-posts.media', $approvedPost),
@@ -68,6 +70,7 @@ it('returns only the current member’s ready own and approved-follow photos', f
                 [
                     'id' => $ownPost->id,
                     'caption' => null,
+                    'location' => null,
                     'createdAt' => $ownPost->created_at->toIso8601String(),
                     'author' => ['id' => $viewer->id, 'name' => $viewer->name],
                     'mediaUrl' => route('photo-posts.media', $ownPost),
@@ -81,7 +84,8 @@ it('returns only the current member’s ready own and approved-follow photos', f
             ->missing('photoPosts.data.0.user_id')
             ->missing('photoPosts.data.0.output_key')
             ->missing('photoPosts.data.0.raw_key')
-            ->missing('photoPosts.data.0.email'));
+            ->missing('photoPosts.data.0.email'))
+        ->assertDontSee('<script>location canary</script>', false);
 });
 
 it('returns only viewer action states including toggled-off revisions and absent defaults', function () {

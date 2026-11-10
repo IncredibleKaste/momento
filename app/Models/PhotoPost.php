@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property string $attempt_token
  * @property PhotoPostStatus $status
  * @property string|null $caption
+ * @property string|null $location
  * @property string $raw_key
  * @property string $output_key
  * @property int $input_bytes
@@ -32,11 +33,11 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $deleted_at
  */
 #[Fillable([
-    'user_id', 'idempotency_key', 'request_fingerprint', 'attempt_token', 'status', 'caption',
+    'user_id', 'idempotency_key', 'request_fingerprint', 'attempt_token', 'status', 'caption', 'location',
     'raw_key', 'output_key', 'input_bytes', 'staging_bytes_charged', 'processed_bytes_charged',
     'failure_code', 'processing_started_at', 'cancel_requested_at', 'cleanup_due_at', 'cleanup_completed_at', 'deleted_at',
 ])]
-#[Visible(['id', 'user_id', 'status', 'caption', 'created_at', 'updated_at'])]
+#[Visible(['id', 'user_id', 'status', 'caption', 'location', 'created_at', 'updated_at'])]
 class PhotoPost extends Model
 {
     /** @use HasFactory<PhotoPostFactory> */

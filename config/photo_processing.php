@@ -9,6 +9,7 @@ return [
     'max_outstanding_operations' => 4,
     'max_staging_bytes' => 100_000_000,
     'max_caption_characters' => 1000,
+    'max_location_characters' => 100,
     'decoder_timeout_seconds' => 130,
     'processing_recovery_after_seconds' => 180,
 ];

@@ -38,6 +38,7 @@ it('persists owner-private saves and returns only a narrow newest-first projecti
     $newer = PhotoPost::factory()->for($viewer)->create([
         'status' => PhotoPostStatus::Ready,
         'caption' => 'Latest photo',
+        'location' => 'Old town',
     ]);
 
     $this->actingAs($viewer)->post(route('photo-saves.update', $older), saveRequest($older, true, 0, 'b078de57-0799-451c-8bd8-c89b3101bd54'))
@@ -52,6 +53,7 @@ it('persists owner-private saves and returns only a narrow newest-first projecti
             ->where('savedPosts.data.0', [
                 'id' => $newer->id,
                 'caption' => 'Latest photo',
+                'location' => 'Old town',
                 'author' => ['id' => $viewer->id, 'name' => $viewer->name],
                 'revision' => 1,
                 'createdAt' => $newer->created_at->toIso8601String(),
