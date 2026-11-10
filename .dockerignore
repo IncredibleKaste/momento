@@ -13,6 +13,9 @@
 !bootstrap/
 !bootstrap/app.php
 !bootstrap/providers.php
+!bin/
+!bin/photo-decoder
+!bin/photo-decoder.php
 !config/
 !config/**
 !database/
@@ -28,6 +31,9 @@
 !docker/Caddyfile
 !docker/php.ini
 !docker/patch-php-parser-download.php
+!docker/photo-decoder-policy.xml
+!docker/icc/
+!docker/icc/sRGB2014.icc
 !tests/
 !tests/Runtime/
 !tests/Runtime/PhpParserDownloadPatchProbe.php

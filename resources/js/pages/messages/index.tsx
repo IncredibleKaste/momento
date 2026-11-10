@@ -7,9 +7,12 @@ import {
     usePage,
     usePoll,
 } from '@inertiajs/react';
+import { ArrowLeft, Search, Send } from 'lucide-react';
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import InputError from '@/components/input-error';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { useInitials } from '@/hooks/use-initials';
 import { dashboard } from '@/routes';
 import {
     index as messagesIndex,
@@ -58,6 +61,7 @@ type Props = {
 
 function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
     const { auth } = usePage().props;
+    const initials = useInitials();
     const log = useRef<HTMLDivElement>(null);
     const renderedThreadId = useRef<number | null>(null);
     const renderedLastMessageId = useRef<number | null>(null);
@@ -224,19 +228,26 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
 
     return (
         <section
-            className="flex h-[72vh] max-h-[calc(100dvh-18rem)] min-h-0 flex-col border border-border bg-card"
+            className="chat-thread"
             aria-label={`Conversation with ${thread.member.name}`}
         >
-            <header className="flex items-center gap-3 border-b border-border px-4 py-3">
+            <header className="chat-thread-header">
                 <Link
                     href={messagesIndex({
                         query: search ? { q: search } : {},
                     })}
-                    className="inline-flex min-h-11 items-center underline underline-offset-4 md:hidden"
+                    prefetch={false}
+                    className="inline-flex size-11 shrink-0 items-center justify-center rounded-md hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring min-[601px]:hidden"
+                    aria-label="Back to conversations"
                 >
-                    Back
+                    <ArrowLeft aria-hidden="true" className="size-5" />
                 </Link>
-                <h2 className="min-w-0 flex-1 truncate font-serif text-xl">
+                <Avatar aria-hidden="true" className="size-[42px] shrink-0">
+                    <AvatarFallback className="text-sm">
+                        {initials(thread.member.name)}
+                    </AvatarFallback>
+                </Avatar>
+                <h2 className="min-w-0 flex-1 text-sm font-bold wrap-anywhere">
                     {thread.member.name}
                 </h2>
                 {thread.unreadCount > 0 && (
@@ -253,7 +264,7 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                         root.scrollHeight - root.scrollTop - root.clientHeight <
                         100;
                 }}
-                className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4"
+                className="chat-log"
                 aria-live="polite"
                 aria-relevant="additions text"
             >
@@ -264,6 +275,7 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                                 query: search ? { q: search } : {},
                             })}
                             preserveScroll
+                            prefetch={false}
                             className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
                         >
                             Return to latest messages
@@ -280,6 +292,7 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                                 },
                             })}
                             preserveScroll
+                            prefetch={false}
                             className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
                         >
                             Load older messages
@@ -300,9 +313,9 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                                 data-incoming-message={
                                     !own ? 'true' : undefined
                                 }
-                                className={`max-w-[85%] rounded-xl border border-border px-3 py-2 break-words whitespace-pre-wrap ${own ? 'ml-auto bg-secondary' : 'mr-auto bg-background'}`}
+                                className={`chat-bubble ${own ? 'chat-bubble-own' : ''}`}
                             >
-                                <p className="mb-1 text-xs text-muted-foreground">
+                                <p className="sr-only">
                                     {own ? 'You' : message.senderName}
                                 </p>
                                 <p>{message.body}</p>
@@ -312,7 +325,7 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                 )}
             </div>
             {thread.canSend ? (
-                <form onSubmit={submit} className="border-t border-border p-3">
+                <form onSubmit={submit} className="chat-composer">
                     <InputError
                         id="message-body-error"
                         message={form.errors.body}
@@ -330,7 +343,7 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                     <label htmlFor="message-body" className="sr-only">
                         Message to {thread.member.name}
                     </label>
-                    <div className="flex items-end gap-2">
+                    <div className="chat-input-shell">
                         <textarea
                             ref={composer}
                             id="message-body"
@@ -345,7 +358,7 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                             }
                             onKeyDown={handleKeyDown}
                             placeholder="Write a message…"
-                            className="max-h-[4.5rem] min-h-11 flex-1 resize-none overflow-y-auto rounded-md border border-input bg-background px-3 py-2 text-base leading-6 focus-visible:outline-2 focus-visible:outline-ring"
+                            className="max-h-[4.5rem] min-h-11 w-full min-w-0 resize-none overflow-y-auto rounded-3xl border-0 bg-transparent py-2 pr-32 pl-4 text-base leading-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring min-[601px]:text-sm"
                         />
                         <Button
                             type="submit"
@@ -353,8 +366,10 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                                 form.processing ||
                                 form.data.body.trim().length === 0
                             }
-                            className="min-h-11"
+                            variant="ghost"
+                            className="absolute right-0 bottom-0 min-h-11 min-w-11 rounded-full text-foreground"
                         >
+                            <Send aria-hidden="true" className="size-5" />
                             {form.processing
                                 ? 'Sending…'
                                 : failed
@@ -381,6 +396,8 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
 }
 
 export default function Messages({ conversations, search, thread }: Props) {
+    const { auth } = usePage().props;
+    const initials = useInitials();
     const [query, setQuery] = useState(search);
 
     useEffect(() => setQuery(search), [search]);
@@ -397,30 +414,25 @@ export default function Messages({ conversations, search, thread }: Props) {
     return (
         <>
             <Head title="Messages" />
-            <div className="py-8">
-                <header className="mb-5 flex items-center justify-between gap-4">
-                    <div>
-                        <h1 className="font-serif text-3xl">Messages</h1>
-                        <p className="text-sm text-muted-foreground">
-                            Private conversations with members who follow each
-                            other.
-                        </p>
-                    </div>
-                    <Link
-                        href={dashboard()}
-                        className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
-                    >
-                        Home
-                    </Link>
-                </header>
-                <div className="grid gap-4 md:grid-cols-[minmax(15rem,21rem)_1fr]">
+            <div className="messages-page">
+                <h1 className="sr-only">Messages</h1>
+                <div className="chat-layout">
                     <aside
-                        className={thread ? 'hidden md:block' : 'block'}
+                        className={`chat-conversations ${thread ? 'hidden min-[601px]:flex' : 'flex'}`}
                         aria-label="Existing conversations"
                     >
+                        <header className="mb-[22px] min-w-0 shrink-0">
+                            <p className="text-lg font-bold wrap-anywhere">
+                                {auth.user.name}
+                            </p>
+                            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                                Private conversations with members who follow
+                                each other.
+                            </p>
+                        </header>
                         <form
                             onSubmit={searchConversations}
-                            className="mb-3 flex gap-2"
+                            className="flex shrink-0 items-center rounded-full border border-border bg-card pl-3.5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring"
                         >
                             <label
                                 htmlFor="conversation-search"
@@ -437,63 +449,91 @@ export default function Messages({ conversations, search, thread }: Props) {
                                 }
                                 maxLength={80}
                                 placeholder="Search names"
-                                className="min-h-11 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm"
+                                className="min-h-11 min-w-0 flex-1 border-0 bg-transparent text-base outline-none min-[601px]:text-sm"
                             />
                             <Button
                                 type="submit"
-                                variant="outline"
-                                className="min-h-11"
+                                variant="ghost"
+                                size="icon"
+                                className="size-11 shrink-0 rounded-full"
+                                aria-label="Search conversations"
                             >
-                                Search
+                                <Search aria-hidden="true" className="size-5" />
                             </Button>
                         </form>
-                        {conversations.data.length === 0 ? (
-                            <p className="border border-border p-4 text-sm text-muted-foreground">
-                                {search
-                                    ? 'No existing conversations match that name.'
-                                    : 'No conversations yet. Visit a mutually followed member’s profile to message them.'}
-                            </p>
-                        ) : (
-                            <ul className="divide-y divide-border border border-border">
-                                {conversations.data.map((item) => (
-                                    <li key={item.id}>
-                                        <Link
-                                            href={messagesShow(item.id, {
-                                                query: search
-                                                    ? { q: search }
-                                                    : {},
-                                            })}
-                                            className={`block min-h-20 px-3 py-3 hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring ${thread?.id === item.id ? 'bg-muted/60' : ''}`}
-                                        >
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span className="truncate font-medium">
-                                                    {item.member.name}
-                                                </span>
+                        <h2 className="mt-6 mb-3 shrink-0 text-[15px] font-semibold">
+                            Chats
+                        </h2>
+                        <div className="shrink-0 grow">
+                            {conversations.data.length === 0 ? (
+                                <p className="px-2 py-4 text-xs leading-relaxed text-muted-foreground">
+                                    {search
+                                        ? 'No existing conversations match that name.'
+                                        : 'No conversations yet. Visit a mutually followed member’s profile to message them.'}
+                                </p>
+                            ) : (
+                                <ul>
+                                    {conversations.data.map((item) => (
+                                        <li key={item.id}>
+                                            <Link
+                                                href={messagesShow(item.id, {
+                                                    query: search
+                                                        ? { q: search }
+                                                        : {},
+                                                })}
+                                                prefetch={false}
+                                                aria-current={
+                                                    thread?.id === item.id
+                                                        ? 'page'
+                                                        : undefined
+                                                }
+                                                className={`flex min-h-[70px] items-center gap-[11px] rounded-md px-2 py-3.5 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring ${thread?.id === item.id ? 'bg-muted' : ''}`}
+                                            >
+                                                <Avatar
+                                                    aria-hidden="true"
+                                                    className="size-[42px] shrink-0"
+                                                >
+                                                    <AvatarFallback className="text-sm">
+                                                        {initials(
+                                                            item.member.name,
+                                                        )}
+                                                    </AvatarFallback>
+                                                </Avatar>
+                                                <div className="min-w-0 flex-1">
+                                                    <span className="block truncate text-[13px] font-bold">
+                                                        {item.member.name}
+                                                    </span>
+                                                    <p className="mt-1.5 truncate text-xs text-muted-foreground">
+                                                        {item.latestMessage
+                                                            ?.body ??
+                                                            'Conversation started'}
+                                                    </p>
+                                                </div>
                                                 {item.unreadCount > 0 && (
-                                                    <span className="rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">
+                                                    <span
+                                                        aria-label={`${item.unreadCount} unread messages`}
+                                                        className="chat-unread"
+                                                    >
                                                         {item.unreadCount}
                                                     </span>
                                                 )}
-                                            </div>
-                                            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-                                                {item.latestMessage?.body ??
-                                                    'Conversation started'}
-                                            </p>
-                                        </Link>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
+                                            </Link>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
                         {(conversations.prev_page_url ||
                             conversations.next_page_url) && (
                             <nav
                                 aria-label="Conversation pages"
-                                className="flex justify-between py-2"
+                                className="flex shrink-0 justify-between py-2"
                             >
                                 {conversations.prev_page_url && (
                                     <Link
                                         href={conversations.prev_page_url}
                                         preserveScroll
+                                        prefetch={false}
                                         className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
                                     >
                                         Previous
@@ -503,6 +543,7 @@ export default function Messages({ conversations, search, thread }: Props) {
                                     <Link
                                         href={conversations.next_page_url}
                                         preserveScroll
+                                        prefetch={false}
                                         className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
                                     >
                                         Next
@@ -510,8 +551,17 @@ export default function Messages({ conversations, search, thread }: Props) {
                                 )}
                             </nav>
                         )}
+                        <Link
+                            href={dashboard()}
+                            prefetch={false}
+                            className="inline-flex min-h-11 shrink-0 items-center text-xs underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
+                        >
+                            Home
+                        </Link>
                     </aside>
-                    <div className={thread ? 'block' : 'hidden md:block'}>
+                    <div
+                        className={`chat-panel min-h-0 min-w-0 ${thread ? 'block' : 'hidden min-[601px]:block'}`}
+                    >
                         {thread ? (
                             <ThreadPanel
                                 key={thread.id}
@@ -519,8 +569,13 @@ export default function Messages({ conversations, search, thread }: Props) {
                                 search={search}
                             />
                         ) : (
-                            <div className="hidden min-h-[65vh] items-center justify-center border border-border bg-card text-sm text-muted-foreground md:flex">
-                                Choose a conversation to read and reply.
+                            <div className="flex h-full flex-col items-center justify-center gap-3 p-[30px] text-center">
+                                <h2 className="font-serif text-4xl">
+                                    A little conversation.
+                                </h2>
+                                <p className="text-xs leading-relaxed text-muted-foreground">
+                                    Choose a conversation to read and reply.
+                                </p>
                             </div>
                         )}
                     </div>

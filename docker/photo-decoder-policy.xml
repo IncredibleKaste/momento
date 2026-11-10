@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<policymap>
+  <policy domain="resource" name="memory" value="256MiB"/>
+  <policy domain="resource" name="map" value="512MiB"/>
+  <policy domain="resource" name="disk" value="2GiB"/>
+  <policy domain="resource" name="thread" value="1"/>
+  <policy domain="resource" name="time" value="120"/>
+  <!-- ImageMagick requires list length to be strictly below this limit. -->
+  <policy domain="resource" name="list-length" value="2"/>
+  <policy domain="resource" name="width" value="50000"/>
+  <policy domain="resource" name="height" value="50000"/>
+  <policy domain="resource" name="temporary-path" value="/tmp"/>
+
+  <policy domain="coder" rights="none" pattern="*"/>
+  <policy domain="coder" rights="read" pattern="{JPEG,PNG,WEBP,HEIC,HEIF}"/>
+  <policy domain="coder" rights="read | write" pattern="WEBP"/>
+  <policy domain="module" rights="none" pattern="*"/>
+  <policy domain="module" rights="read | write" pattern="{JPEG,PNG,WEBP,HEIC}"/>
+  <policy domain="delegate" rights="none" pattern="*"/>
+  <policy domain="filter" rights="none" pattern="*"/>
+  <policy domain="path" rights="none" pattern="*"/>
+  <policy domain="path" rights="read | write" pattern="/tmp/magick-*"/>
+</policymap>

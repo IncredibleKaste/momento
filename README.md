@@ -4,7 +4,11 @@ Momento is a photo-sharing application in development. The intended community al
 
 ## Current state
 
-The Laravel + Inertia + React starter is implemented, including local authentication, email verification, password recovery and profile settings. Optional two-factor authentication and passkeys are adopted for local accounts; their combined policy and browser flows still require verification. Directional follow requests, approvals and removal now have a management screen and a shared photo-access rule. Photo uploads, the private feed and external identity providers are not implemented in this branch. E01 adds a Docker/runtime candidate; deployment is not yet verified.
+The application includes local authentication, two-factor authentication, passkeys, account settings, approved follows, display-name people search, caption-only photo search and mutual-follow text chat. Authorized home and profile photo pages connect to private photo detail, likes, saves, bounded comments and owner deletion. Account email is read-only and whole-account deletion is disabled.
+
+Photo publishing remains unavailable until a qualified isolated decoder is configured. External identity providers, message attachments and message requests remain outside the integrated feature set. Source and runtime checks do not establish deployment, live provider or recovery acceptance.
+
+The interface follows the Instant Memories mockup: paper and charcoal themes, a transparent spectrum navigation rail and restrained corner-ribbon motion. EB Garamond and DM Sans are bundled under their included open-font licenses; builds and browsers do not fetch fonts from a third-party CDN.
 
 The application requires PostgreSQL, Redis and private media storage. Microsoft is the selected required external provider; SWITCH is stretch. The checked-in development example still uses SQLite and database cache; tests use SQLite and in-memory sessions/cache. Do not treat starter defaults as the target deployment architecture.
 
@@ -24,7 +28,7 @@ npm run types:check
 npm run build
 ```
 
-These passed in the existing local installation on 2026-09-26 (40 tests, 138 assertions). A fresh install, browser flows, PostgreSQL/Redis integration and live CI were not verified in that assessment.
+CI runs source checks, PostgreSQL/Redis integration and native image-runtime qualification. Trusted integration builds also verify the published artifact's privacy and source identity. Live provider, deployment and recovery acceptance are separate checks.
 
 ## Documentation
 

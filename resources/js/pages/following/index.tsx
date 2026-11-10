@@ -81,7 +81,7 @@ function Relationships({
                 <ul
                     className={
                         isFollowing
-                            ? 'grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3'
+                            ? 'grid grid-cols-2 gap-[18px] min-[541px]:grid-cols-3'
                             : 'space-y-4'
                     }
                 >
@@ -97,7 +97,7 @@ function Relationships({
                             <div
                                 className={
                                     isFollowing
-                                        ? 'flex min-w-0 flex-col items-center gap-2'
+                                        ? 'flex w-full min-w-0 flex-col items-center gap-2'
                                         : 'flex min-w-0 items-center gap-3'
                                 }
                             >
@@ -105,7 +105,7 @@ function Relationships({
                                     aria-hidden="true"
                                     className={
                                         isFollowing
-                                            ? 'size-[72px] shrink-0 border-0 sm:size-[88px]'
+                                            ? 'size-[72px] shrink-0 rounded-full border-0 min-[541px]:size-[88px]'
                                             : 'size-10 shrink-0 border border-border'
                                     }
                                 >
@@ -121,13 +121,21 @@ function Relationships({
                                 </Avatar>
                                 <Link
                                     href={show(follow.member.id)}
+                                    prefetch={false}
+                                    aria-label={follow.member.name}
                                     className={
                                         isFollowing
-                                            ? 'inline-flex min-h-11 w-full min-w-0 items-center justify-center text-center text-sm font-medium break-all underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+                                            ? 'inline-flex min-h-11 w-full min-w-0 items-center justify-center text-center text-xs font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
                                             : 'inline-flex min-h-11 min-w-0 flex-1 items-center text-base font-medium break-all underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
                                     }
                                 >
-                                    {follow.member.name}
+                                    {isFollowing ? (
+                                        <span className="line-clamp-2 w-full min-w-0 break-words">
+                                            {follow.member.name}
+                                        </span>
+                                    ) : (
+                                        follow.member.name
+                                    )}
                                 </Link>
                             </div>
                             <div
@@ -202,6 +210,7 @@ export default function Following({
                     <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
                         <Link
                             href={show(auth.user.id)}
+                            prefetch={false}
                             className="inline-flex min-h-11 items-center underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                         >
                             Your profile

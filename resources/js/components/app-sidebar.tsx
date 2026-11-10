@@ -1,9 +1,10 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
-    House,
+    Bookmark,
+    PanelsTopLeft,
+    ImagePlus,
     MessageCircle,
     Search,
-    UserRound,
     UsersRound,
     X,
 } from 'lucide-react';
@@ -25,58 +26,64 @@ import { index as following } from '@/routes/following';
 import { show as profile } from '@/routes/members';
 import { index as people } from '@/routes/people';
 import { index as messages } from '@/routes/messages';
+import { create as createPhotoPost } from '@/routes/photo-posts';
+import { index as saved } from '@/routes/saved';
 import type { NavItem } from '@/types';
 
 export function AppSidebar() {
     const { auth } = usePage().props;
     const { setOpenMobile } = useSidebar();
     const mainNavItems: NavItem[] = [
-        { title: 'Home', href: dashboard(), icon: House },
-        { title: 'Profile', href: profile(auth.user.id), icon: UserRound },
+        { title: 'Feed', href: dashboard(), icon: PanelsTopLeft },
+        { title: 'Search', href: people(), icon: Search },
         { title: 'Following', href: following(), icon: UsersRound },
-        { title: 'Messages', href: messages(), icon: MessageCircle },
-        { title: 'Find people', href: people(), icon: Search },
+        { title: 'Create', href: createPhotoPost(), icon: ImagePlus },
+        { title: 'Saved', href: saved(), icon: Bookmark },
+        { title: 'Profile', href: profile(auth.user.id) },
+        { title: 'Chat', href: messages(), icon: MessageCircle },
     ];
 
     return (
         <Sidebar collapsible="icon" className="momento-rail">
-            <SidebarHeader className="flex-row items-center p-0">
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <Button
-                            variant="ghost"
-                            className="rail-link relative h-11 w-full justify-start gap-3 overflow-hidden px-2"
-                            asChild
-                        >
-                            <Link
-                                href={dashboard()}
-                                aria-label="Momento home"
-                                onClick={() => setOpenMobile(false)}
+            <div id="main-navigation" className="momento-navigation">
+                <SidebarHeader className="rail-header flex-row items-center p-0">
+                    <SidebarMenu>
+                        <SidebarMenuItem>
+                            <Button
+                                variant="ghost"
+                                className="rail-link rail-brand"
+                                asChild
                             >
-                                <AppLogo />
-                            </Link>
-                        </Button>
-                    </SidebarMenuItem>
-                </SidebarMenu>
-                <Button
-                    variant="ghost"
-                    className="size-11 shrink-0 md:hidden"
-                    aria-label="Close navigation"
-                    onClick={() => setOpenMobile(false)}
-                >
-                    <X />
-                </Button>
-            </SidebarHeader>
+                                <Link
+                                    href={dashboard()}
+                                    aria-label="Momento home"
+                                    onClick={() => setOpenMobile(false)}
+                                >
+                                    <AppLogo />
+                                </Link>
+                            </Button>
+                        </SidebarMenuItem>
+                    </SidebarMenu>
+                    <Button
+                        variant="ghost"
+                        className="size-11 shrink-0 md:hidden"
+                        aria-label="Close navigation"
+                        onClick={() => setOpenMobile(false)}
+                    >
+                        <X />
+                    </Button>
+                </SidebarHeader>
 
-            <SidebarContent className="pt-10">
-                <nav aria-label="Main navigation" id="main-navigation">
-                    <NavMain items={mainNavItems} />
-                </nav>
-            </SidebarContent>
+                <SidebarContent className="rail-content">
+                    <nav aria-label="Main navigation">
+                        <NavMain items={mainNavItems} />
+                    </nav>
+                </SidebarContent>
 
-            <SidebarFooter className="p-0">
-                <NavUser />
-            </SidebarFooter>
+                <SidebarFooter className="p-0">
+                    <NavUser />
+                </SidebarFooter>
+            </div>
         </Sidebar>
     );
 }

@@ -27,6 +27,10 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->trimStrings([
+            fn (Request $request): bool => $request->is('photo-posts'),
+        ]);
+
         $middleware->trustProxies(
             headers: Request::HEADER_X_FORWARDED_FOR |
                 Request::HEADER_X_FORWARDED_PORT |

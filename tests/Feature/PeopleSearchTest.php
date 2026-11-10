@@ -98,9 +98,11 @@ it('rejects queries outside the supported type and length', function (mixed $que
         ->assertRedirect(route('people.index'))
         ->assertSessionHasErrors(['q' => $message]);
 })->with([
-    'too short' => ['A', 'The display name field must be at least 2 characters.'],
-    'too long' => [str_repeat('A', 81), 'The display name field must not be greater than 80 characters.'],
-    'array value' => [['Alicia', 'Member'], 'The display name field must be a string.'],
+    'too short' => ['A', 'The search term field must be at least 2 characters.'],
+    'too long' => [str_repeat('A', 81), 'The search term field must not be greater than 80 characters.'],
+    'array value' => [['Alicia', 'Member'], 'The search term field must be a string.'],
+    'embedded null byte' => ["A\0B", 'The search term field format is invalid.'],
+    'invalid UTF-8' => ["A\xffB", 'The search term field format is invalid.'],
 ]);
 
 it('rate limits search requests per verified member', function () {

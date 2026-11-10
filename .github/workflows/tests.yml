@@ -29,7 +29,6 @@ jobs:
           - 6379:6379
         options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
 
-
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -116,6 +115,68 @@ jobs:
           CACHE_PREFIX: microsoft-test-${{ github.run_id }}-${{ github.run_attempt }}-
           MOMENTO_MICROSOFT_CONCURRENCY: '1'
         run: php artisan test --compact tests/Feature/Auth/MicrosoftAuthenticationTest.php tests/Feature/CaseInsensitiveContactEmailMigrationTest.php
+
+      - name: Check photo lifecycle and authorization with PostgreSQL
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: momento_test
+          DB_USERNAME: momento_test
+          DB_PASSWORD: ci-only-password
+          CACHE_STORE: array
+          MOMENTO_F07_CONCURRENCY: '1'
+          MOMENTO_F25_CONCURRENCY: '1'
+        run: |
+          php artisan test --compact \
+            tests/Feature/PhotoPostVisibilityTest.php \
+            tests/Feature/PhotoPostAccessTest.php \
+            tests/Feature/PhotoPostLifecycleTest.php \
+            tests/Feature/PhotoPostConcurrencyTest.php \
+            tests/Feature/PhotoDetailTest.php \
+            tests/Feature/PhotoFeedTest.php \
+            tests/Feature/ProfilePhotoTest.php \
+            tests/Feature/PhotoCaptionSearchTest.php \
+            tests/Feature/PhotoPostDeletionTest.php
+
+      - name: Check photo likes with PostgreSQL
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: momento_test
+          DB_USERNAME: momento_test
+          DB_PASSWORD: ci-only-password
+          CACHE_STORE: array
+          MOMENTO_PHOTO_LIKE_CONCURRENCY: '1'
+        run: php artisan test --compact tests/Feature/PhotoLikeTest.php
+
+      - name: Check private photo saves with PostgreSQL
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: momento_test
+          DB_USERNAME: momento_test
+          DB_PASSWORD: ci-only-password
+          CACHE_STORE: array
+          MOMENTO_PHOTO_SAVE_CONCURRENCY: '1'
+        run: php artisan test --compact tests/Feature/PhotoSaveTest.php
+
+      - name: Check photo comments with PostgreSQL
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: momento_test
+          DB_USERNAME: momento_test
+          DB_PASSWORD: ci-only-password
+          CACHE_STORE: array
+          MOMENTO_PHOTO_COMMENT_CONCURRENCY: '1'
+        run: |
+          php artisan test --compact \
+            tests/Feature/PhotoCommentsTest.php \
+            tests/Feature/PhotoCommentConcurrencyTest.php
 
       - name: Check two-factor concurrency with PostgreSQL and Redis
         env:

@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import {
     SidebarGroup,
@@ -7,22 +7,21 @@ import {
     useSidebar,
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
+import { useInitials } from '@/hooks/use-initials';
 import type { NavItem } from '@/types';
 
 export function NavMain({ items }: { items: NavItem[] }) {
     const { isCurrentUrl } = useCurrentUrl();
     const { setOpenMobile } = useSidebar();
+    const { auth } = usePage().props;
+    const getInitials = useInitials();
 
     return (
         <SidebarGroup className="p-0">
-            <SidebarMenu>
+            <SidebarMenu className="rail-menu">
                 {items.map((item) => (
                     <SidebarMenuItem key={item.title}>
-                        <Button
-                            asChild
-                            variant="ghost"
-                            className="rail-link relative h-11 w-full justify-start gap-3 overflow-hidden px-2"
-                        >
+                        <Button asChild variant="ghost" className="rail-link">
                             <Link
                                 href={item.href}
                                 aria-label={item.title}
@@ -32,8 +31,14 @@ export function NavMain({ items }: { items: NavItem[] }) {
                                 }
                                 onClick={() => setOpenMobile(false)}
                             >
-                                <span className="flex size-8 shrink-0 items-center justify-center">
-                                    {item.icon && <item.icon />}
+                                <span className="rail-icon" aria-hidden="true">
+                                    {item.title === 'Profile' ? (
+                                        <span className="rail-profile-avatar">
+                                            {getInitials(auth.user.name)}
+                                        </span>
+                                    ) : (
+                                        item.icon && <item.icon />
+                                    )}
                                 </span>
                                 <span className="rail-label">{item.title}</span>
                             </Link>
