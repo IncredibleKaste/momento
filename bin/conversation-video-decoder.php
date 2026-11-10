@@ -32,6 +32,17 @@ function failVideo(): never
     throw new VideoProcessingFailure;
 }
 
+function reportFailure(string $phase): never
+{
+    $phase = match ($phase) {
+        'input_probe', 'input_validation', 'frame_scan', 'transcode', 'output_probe', 'output_validation' => $phase,
+        default => 'input_validation',
+    };
+
+    fwrite(STDERR, 'F28_PHASE='.$phase."\n");
+    exit(70);
+}
+
 function validInput(string $path): bool
 {
     if (! str_starts_with($path, DIRECTORY_SEPARATOR) || is_link($path) || ! is_file($path)) {
@@ -479,22 +490,32 @@ function removePartialOutput(string $path): void
 }
 
 if ($argc !== 3 || ! validInput($argv[1]) || ! validOutput($argv[2])) {
-    fwrite(STDERR, "Video processing failed.\n");
-    exit(70);
+    reportFailure('input_validation');
 }
 
 $inputPath = $argv[1];
 $outputPath = $argv[2];
 $success = false;
+$failurePhase = 'input_validation';
 
 try {
+    $failurePhase = 'input_probe';
     $inputProbe = probe($inputPath, 5);
-    $dimensions = is_array($inputProbe) ? validInputProbe($inputProbe) : null;
-    if ($dimensions === null || framesHaveUnexpectedSideData($inputPath)) {
+    if ($inputProbe === null) {
+        failVideo();
+    }
+    $failurePhase = 'input_validation';
+    $dimensions = validInputProbe($inputProbe);
+    if ($dimensions === null) {
+        failVideo();
+    }
+    $failurePhase = 'frame_scan';
+    if (framesHaveUnexpectedSideData($inputPath)) {
         failVideo();
     }
 
     $filter = "scale=w='min(1440,iw)':h='min(1440,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1,fps='min(30,source_fps)',format=yuv420p";
+    $failurePhase = 'transcode';
     $transcode = runNative([
         FFMPEG,
         '-nostdin',
@@ -544,8 +565,13 @@ try {
         failVideo();
     }
 
+    $failurePhase = 'output_probe';
     $outputProbe = probe($outputPath, 8);
-    $result = is_array($outputProbe) ? validOutputProbe($outputProbe) : null;
+    if ($outputProbe === null) {
+        failVideo();
+    }
+    $failurePhase = 'output_validation';
+    $result = validOutputProbe($outputProbe);
     if ($result === null) {
         failVideo();
     }
@@ -567,6 +593,5 @@ try {
 }
 
 if (! $success) {
-    fwrite(STDERR, "Video processing failed.\n");
-    exit(70);
+    reportFailure($failurePhase);
 }

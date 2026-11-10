@@ -225,7 +225,13 @@ function decodeFixture(string $input, string $output): array
     $process = new Process([VIDEO_DECODER, $input, $output], timeout: 140);
     $process->run();
     if (! $process->isSuccessful() || ! is_file($output)) {
-        throw new RuntimeException('The video decoder rejected a supported synthetic fixture.');
+        $phase = decoderFailurePhase($process->getErrorOutput());
+        $message = 'The video decoder rejected a supported synthetic fixture.';
+        if ($phase !== null) {
+            $message = 'The video decoder rejected a supported synthetic fixture during '.$phase.'.';
+        }
+
+        throw new RuntimeException($message);
     }
     $facts = json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR);
     if (! is_array($facts)
@@ -284,6 +290,18 @@ function assertRejected(string $input, string $output): void
     if ($process->isSuccessful() || file_exists($output) || is_link($output)) {
         throw new RuntimeException('Invalid or over-limit input was accepted or left a partial output behind.');
     }
+    if (decoderFailurePhase($process->getErrorOutput()) === null) {
+        throw new RuntimeException('The video decoder returned an invalid failure diagnostic.');
+    }
+}
+
+function decoderFailurePhase(string $errorOutput): ?string
+{
+    if (preg_match('/\AF28_PHASE=(input_probe|input_validation|frame_scan|transcode|output_probe|output_validation)\n\z/D', $errorOutput, $matches) !== 1) {
+        return null;
+    }
+
+    return $matches[1];
 }
 
 function moovIsAtEnd(string $path): bool

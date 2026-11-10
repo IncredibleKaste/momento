@@ -71,6 +71,37 @@ it('accepts a request into a readable encrypted conversation without mutual foll
         ->assertJsonPath('data.0.canMessage', true);
 });
 
+it('includes viewer-scoped request panels on an accepted conversation thread', function () {
+    $requester = User::factory()->create();
+    $recipient = User::factory()->create(['message_requests_enabled' => true]);
+    $this->actingAs($requester)->post(route('message-requests.store', $recipient), [
+        'body' => 'Accepted conversation',
+        'nonce' => Str::uuid()->toString(),
+    ]);
+    $acceptedRequest = ConversationRequest::sole();
+    $this->actingAs($recipient)->post(route('message-requests.accept', $acceptedRequest));
+    $conversation = Conversation::sole();
+
+    $pendingSender = User::factory()->create(['name' => 'Visible pending sender']);
+    app(ManageConversationRequests::class)->initiate($pendingSender, $recipient, 'Visible pending request', Str::uuid()->toString());
+    $unrelatedSender = User::factory()->create(['name' => 'Unrelated sender']);
+    $unrelatedRecipient = User::factory()->create(['message_requests_enabled' => true]);
+    app(ManageConversationRequests::class)->initiate($unrelatedSender, $unrelatedRecipient, 'Unrelated private request', Str::uuid()->toString());
+
+    $this->actingAs($recipient)->get(route('messages.show', $conversation))->assertInertia(fn (Assert $page) => $page
+        ->where('selectedRecipient', null)
+        ->where('requests.incomingCount', 1)
+        ->where('requests.outgoingCount', 0)
+        ->has('requests.incoming.data', 2)
+        ->where('requests.incoming.data.0.member.name', 'Visible pending sender')
+        ->where('requests.incoming.data.1.member.id', $requester->id)
+        ->missing('requests.incoming.data.2')
+        ->missing('requests.outgoing.data.0')
+        ->missing('requests.incoming.data.0.member.email')
+        ->where('thread.id', $conversation->id));
+
+});
+
 it('lets only the original recipient reopen after decline or expiry', function () {
     $requester = User::factory()->create();
     $recipient = User::factory()->create(['message_requests_enabled' => true]);
