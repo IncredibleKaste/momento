@@ -90,10 +90,7 @@ class ProcessPhotoPost implements ShouldQueue
             }
             $output = $inspector->inspect($outputPath);
 
-            if ($disk->exists($post->raw_key) && ! $disk->delete($post->raw_key)) {
-                throw new PhotoDecoderException(PhotoPostFailure::StorageUnavailable);
-            }
-            if ($disk->exists($post->raw_key)) {
+            if (! $posts->deleteRawInput($post)) {
                 throw new PhotoDecoderException(PhotoPostFailure::StorageUnavailable);
             }
 
