@@ -12,7 +12,7 @@ class PeopleSearchRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'q' => ['nullable', 'string', 'min:2', 'max:80'],
+            'q' => ['nullable', 'string', 'min:2', 'max:80', 'regex:/\A[^\x00]*\z/u'],
         ];
     }
 
@@ -22,7 +22,7 @@ class PeopleSearchRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'q' => 'display name',
+            'q' => 'search term',
         ];
     }
 }

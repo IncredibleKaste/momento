@@ -18,6 +18,8 @@ The [Docker runtime](runtime.md) serves Laravel and built browser assets using P
 
 Follow requests support owner approval, decline, cancellation, unfollow and follower removal. Each new request after removal requires fresh approval; photo-access checks query the current relationship. Member links and people search expose display names and route identity to verified members.
 
+Photo search matches literal caption text case-insensitively using the database's case rules. It returns twelve authorized photos per cursor page, newest first, with no global totals or location/embedded-metadata search. Search responses send `private, no-store` cache headers; pagination and copied media/detail links recheck access.
+
 The authorized feed, profile grids, photo detail and private media responses share the current-access rule. Likes expose only the viewer's state; saves are private and disappear from results when access is lost. Plain-text comments support bounded pagination and removal by their author or post owner. Owner deletion hides a post immediately; storage remains charged until cleanup is verified.
 
 Text chat requires mutual approved follows. Unfollowing stops new sends while preserving each participant's history. Attachments, read receipts and message requests are not implemented. Account settings retain read-only email and disable whole-account deletion; product-news consent is separate from authentication mail.
