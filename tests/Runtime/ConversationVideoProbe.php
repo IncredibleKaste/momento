@@ -1,7 +1,6 @@
 <?php
 
 declare(strict_types=1);
-use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
 require '/app/vendor/autoload.php';
@@ -10,7 +9,6 @@ const FFMPEG_BIN = '/usr/bin/ffmpeg';
 const FFPROBE_BIN = '/usr/bin/ffprobe';
 const VIDEO_DECODER = '/usr/local/bin/conversation-video-decoder';
 
-$probeStartedAt = hrtime(true);
 $temporaryDirectory = sys_get_temp_dir().'/momento-video-probe-'.bin2hex(random_bytes(8));
 if (! mkdir($temporaryDirectory, 0700)) {
     throw new RuntimeException('Could not create the temporary probe directory.');
@@ -21,11 +19,6 @@ if (! is_string($temporaryDirectory)) {
 }
 
 try {
-    $wrapperExit = "F28_PHASE=transcode\nF28_CAUSE=wrapper_exit\nF28_EXIT=124\nF28_SIGNAL=none\nF28_STDERR=other\n";
-    $diagnostic = decoderFailureDiagnostic($wrapperExit);
-    ensure($diagnostic !== null && $diagnostic['cause'] === 'wrapper_exit' && $diagnostic['exit'] === 124, 'The diagnostic misrepresented a wrapper exit.');
-    ensure(decoderFailureDiagnostic($wrapperExit.'synthetic private-detail canary') === null, 'The diagnostic accepted unrecognized process output.');
-
     ensure(is_executable(FFMPEG_BIN) && is_executable(FFPROBE_BIN) && is_executable(VIDEO_DECODER), 'Required native executable is missing.');
     assertCommand([FFMPEG_BIN, '-version']);
     assertCommand(['/usr/bin/timeout', '--version']);
@@ -35,7 +28,7 @@ try {
     createFixture($ordinary, 3, false, true, metadataCanary: true);
     ensure(moovIsAtEnd($ordinary), 'Ordinary fixture did not put moov at the end.');
     ensure(in_array('H.26[45] User Data Unregistered SEI message', frameSideDataTypes($ordinary), true), 'Ordinary H.264 fixture lacks its benign x264 encoder-info SEI.');
-    decodeFixture($ordinary, $temporaryDirectory.'/ordinary-output.mp4', $probeStartedAt);
+    decodeFixture($ordinary, $temporaryDirectory.'/ordinary-output.mp4');
 
     $fastStart = $temporaryDirectory.'/faststart.mp4';
     createFixture($fastStart, 3, true, false);
@@ -227,23 +220,15 @@ function frameSideDataTypes(string $input): array
 }
 
 /** @return array{width: int, height: int} */
-function decodeFixture(string $input, string $output, ?int $probeStartedAt = null): array
+function decodeFixture(string $input, string $output): array
 {
     $process = new Process([VIDEO_DECODER, $input, $output], timeout: 140);
     $process->run();
     if (! $process->isSuccessful() || ! is_file($output)) {
-        $diagnostic = decoderFailureDiagnostic($process->getErrorOutput());
+        $phase = decoderFailurePhase($process->getErrorOutput());
         $message = 'The video decoder rejected a supported synthetic fixture.';
-        if ($diagnostic !== null) {
-            $message = 'The video decoder rejected a supported synthetic fixture during '.$diagnostic['phase'];
-            if ($diagnostic['cause'] !== null) {
-                $message .= ' (cause='.$diagnostic['cause'].', exit='.($diagnostic['exit'] ?? 'none').', signal='.($diagnostic['signal'] ?? 'none').', stderr='.$diagnostic['stderr'].')';
-            }
-            if ($probeStartedAt !== null && $diagnostic['phase'] === 'transcode') {
-                $reproduction = reproduceOrdinaryFixtureTranscode($input, $probeStartedAt);
-                $message .= ' Synthetic-only 2 GiB address-space control: '.$reproduction;
-            }
-            $message .= '.';
+        if ($phase !== null) {
+            $message = 'The video decoder rejected a supported synthetic fixture during '.$phase.'.';
         }
 
         throw new RuntimeException($message);
@@ -298,124 +283,6 @@ function decodeFixture(string $input, string $output, ?int $probeStartedAt = nul
     return ['width' => $facts['width'], 'height' => $facts['height']];
 }
 
-/**
- * Reproduce only the first generated ordinary fixture's transcode failure.
- * Keep the helper's arguments and other caps, changing only address space.
- */
-function reproduceOrdinaryFixtureTranscode(string $input, int $probeStartedAt): string
-{
-    $output = dirname($input).'/ordinary-reproduction.mp4';
-    $remainingSeconds = 180 - ((hrtime(true) - $probeStartedAt) / 1_000_000_000);
-    if ($remainingSeconds <= 0) {
-        return 'skipped=probe_budget_exhausted';
-    }
-
-    $arguments = [
-        FFMPEG_BIN,
-        '-nostdin',
-        '-hide_banner',
-        '-loglevel', 'error',
-        '-filter_threads', '2',
-        '-xerror',
-        '-n',
-        '-protocol_whitelist', 'file',
-        '-f', 'mov',
-        '-enable_drefs', '0',
-        '-use_absolute_path', '0',
-        '-autorotate',
-        '-threads:v', '2',
-        '-i', $input,
-        '-map', '0:v:0',
-        '-map', '0:a:0?',
-        '-sn',
-        '-dn',
-        '-map_metadata', '-1',
-        '-map_metadata:s', '-1',
-        '-map_chapters', '-1',
-        '-vf', "scale=w='min(1440,iw)':h='min(1440,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1,fps='min(30,source_fps)',format=yuv420p",
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-crf', '25',
-        '-maxrate', '2600k',
-        '-bufsize', '5200k',
-        '-profile:v', 'high',
-        '-level:v', '4.1',
-        '-threads:v', '2',
-        '-c:a', 'aac',
-        '-b:a', '128k',
-        '-ac', '2',
-        '-ar', '48000',
-        '-movflags', '+faststart',
-        '-f', 'mp4',
-        $output,
-    ];
-    $command = [
-        '/usr/bin/env', '-i',
-        '/usr/bin/timeout',
-        '--signal=TERM',
-        '--kill-after=1s',
-        '86s',
-        '/usr/bin/prlimit',
-        '--fsize=25000000:25000000',
-        '--as=2147483648:2147483648',
-        '--cpu=80:85',
-        '--',
-        ...$arguments,
-    ];
-    $process = new Process($command, timeout: min(90, max(1, $remainingSeconds)));
-    $process->disableOutput();
-    $stderr = '';
-    $timedOut = false;
-
-    try {
-        $process->start(function (string $type, string $data) use (&$stderr): void {
-            if ($type === Process::ERR && strlen($stderr) < 4096) {
-                $stderr .= substr($data, 0, 4096 - strlen($stderr));
-            }
-        });
-        $process->wait();
-    } catch (ProcessTimedOutException) {
-        $timedOut = true;
-    } catch (Throwable) {
-        return 'cause=process_error';
-    }
-
-    $exit = $timedOut ? 'none' : ($process->getExitCode() === null ? 'none' : (string) $process->getExitCode());
-    $signal = 'none';
-    try {
-        if (! $timedOut && $process->hasBeenSignaled()) {
-            $signalCode = $process->getTermSignal();
-            $signal = $signalCode === null ? 'none' : (string) $signalCode;
-        }
-    } catch (Throwable) {
-        $signal = 'none';
-    }
-
-    $stderr = str_replace(
-        [$input, $output, dirname($input), 'MOMENTO_INPUT_METADATA_CANARY'],
-        ['[synthetic-input]', '[synthetic-output]', '[synthetic-directory]', '[synthetic-metadata]'],
-        $stderr,
-    );
-    $stderr = preg_replace('~(?<![A-Za-z0-9])/(?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+~', '[path]', $stderr) ?? '';
-    $stderr = preg_replace('/0x[0-9a-fA-F]+/', '[address]', $stderr) ?? '';
-    $stderr = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', ' ', $stderr) ?? '';
-    $stderr = trim(preg_replace('/\s+/', ' ', $stderr) ?? '');
-    $stderr = substr($stderr, 0, 4096);
-    if ($stderr === '') {
-        $stderr = 'empty';
-    }
-
-    $cause = match (true) {
-        $timedOut => 'process_timeout',
-        $signal !== 'none' => 'wrapper_signal',
-        $exit === '0' => 'reproduction_succeeded',
-        $exit === 'none' => 'process_error',
-        default => 'wrapper_exit',
-    };
-
-    return 'cause='.$cause.',exit='.$exit.',signal='.$signal.',stderr='.$stderr;
-}
-
 function assertRejected(string $input, string $output): void
 {
     $process = new Process([VIDEO_DECODER, $input, $output], timeout: 140);
@@ -423,39 +290,18 @@ function assertRejected(string $input, string $output): void
     if ($process->isSuccessful() || file_exists($output) || is_link($output)) {
         throw new RuntimeException('Invalid or over-limit input was accepted or left a partial output behind.');
     }
-    if (decoderFailureDiagnostic($process->getErrorOutput()) === null) {
+    if (decoderFailurePhase($process->getErrorOutput()) === null) {
         throw new RuntimeException('The video decoder returned an invalid failure diagnostic.');
     }
 }
 
-/** @return array{phase: string, cause: string|null, exit: int|null, signal: int|null, stderr: string|null}|null */
-function decoderFailureDiagnostic(string $errorOutput): ?array
+function decoderFailurePhase(string $errorOutput): ?string
 {
-    $pattern = '/\AF28_PHASE=(input_probe|input_validation|frame_scan|transcode|output_probe|output_validation)\n'
-        .'(?:F28_CAUSE=(wrapper_exit|wrapper_signal|tool_unavailable|process_timeout|process_error|stdout_limit|output_missing|output_empty|output_too_large|output_path_invalid)\n'
-        .'F28_EXIT=(none|0|[1-9][0-9]{0,2})\n'
-        .'F28_SIGNAL=(none|[1-9][0-9]?)\n'
-        .'F28_STDERR=(none|resource|filter_option|encoder|io|other)\n)?\z/D';
-    if (preg_match($pattern, $errorOutput, $matches) !== 1) {
+    if (preg_match('/\AF28_PHASE=(input_probe|input_validation|frame_scan|transcode|output_probe|output_validation)\n\z/D', $errorOutput, $matches) !== 1) {
         return null;
     }
 
-    $phase = $matches[1];
-    $hasDetail = ($matches[2] ?? '') !== '';
-    if (($phase === 'transcode') !== $hasDetail) {
-        return null;
-    }
-    if (! $hasDetail) {
-        return ['phase' => $phase, 'cause' => null, 'exit' => null, 'signal' => null, 'stderr' => null];
-    }
-
-    $exit = $matches[3] === 'none' ? null : (int) $matches[3];
-    $signal = $matches[4] === 'none' ? null : (int) $matches[4];
-    if (($exit !== null && $exit > 255) || ($signal !== null && $signal > 64)) {
-        return null;
-    }
-
-    return ['phase' => $phase, 'cause' => $matches[2], 'exit' => $exit, 'signal' => $signal, 'stderr' => $matches[5]];
+    return $matches[1];
 }
 
 function moovIsAtEnd(string $path): bool
