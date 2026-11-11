@@ -141,10 +141,13 @@ try {
     assertRejected($extraStream, $temporaryDirectory.'/extra-stream-output.mp4');
 
     $externalReference = $temporaryDirectory.'/external-reference.mp4';
-    $canary = $temporaryDirectory.'/private-external-canary.bin';
-    file_put_contents($canary, 'MOMENTO_EXTERNAL_DATA_REFERENCE_CANARY');
-    $rewritten = rewriteExternalDataReference(file_get_contents($ordinary), $canary);
+    $externalReferenceData = $temporaryDirectory.'/external-reference-data.mp4';
+    ensure(copy($ordinary, $externalReferenceData), 'Could not create the synthetic external media copy.');
+    $ordinaryBytes = file_get_contents($ordinary);
+    ensure(is_string($ordinaryBytes), 'Could not read the ordinary synthetic fixture.');
+    $rewritten = zeroMediaDataPayload(rewriteExternalDataReference($ordinaryBytes, $externalReferenceData));
     file_put_contents($externalReference, $rewritten);
+    assertExternalReferenceResolves($externalReference);
     assertRejected($externalReference, $temporaryDirectory.'/external-reference-output.mp4');
     ensure(! file_exists($temporaryDirectory.'/external-reference-output.mp4'), 'External dref failure left partial output behind.');
 
@@ -617,15 +620,63 @@ function moovIsAtEnd(string $path): bool
     return $offset === strlen((string) $contents) && $lastType === 'moov';
 }
 
-function rewriteExternalDataReference(string $contents, string $uri): string
+function assertExternalReferenceResolves(string $path): void
+{
+    $process = new Process([
+        FFPROBE_BIN, '-v', 'error', '-protocol_whitelist', 'file', '-f', 'mov',
+        '-enable_drefs', '1', '-use_absolute_path', '1',
+        '-select_streams', 'v:0', '-show_frames', '-show_entries', 'frame=media_type', '-of', 'json', $path,
+    ], timeout: 20);
+    $process->run();
+    $output = $process->getOutput();
+    if (! $process->isSuccessful() || strlen($output) > MAX_SYNTHETIC_AUDIO_FACTS_BYTES) {
+        throw new RuntimeException('Synthetic external-reference positive control failed.');
+    }
+
+    $facts = json_decode($output, true, flags: JSON_THROW_ON_ERROR);
+    $frames = $facts['frames'] ?? null;
+    if (! is_array($frames) || $frames === []) {
+        throw new RuntimeException('Synthetic external-reference positive control decoded no frames.');
+    }
+    foreach ($frames as $frame) {
+        if (($frame['media_type'] ?? null) !== 'video') {
+            throw new RuntimeException('Synthetic external-reference positive control returned an unexpected frame type.');
+        }
+    }
+}
+
+function rewriteExternalDataReference(string $contents, string $externalPath): string
 {
     $found = false;
-    $output = rewriteBoxes($contents, 0, $found, $uri);
+    $output = rewriteBoxes($contents, 0, $found, $externalPath);
     if (! $found) {
         throw new RuntimeException('Synthetic MP4 did not contain a self-contained data reference.');
     }
 
     return $output;
+}
+
+function zeroMediaDataPayload(string $contents): string
+{
+    $offset = 0;
+    $found = false;
+    $length = strlen($contents);
+    while ($offset + 8 <= $length) {
+        $size = unpack('Nsize', substr($contents, $offset, 4))['size'];
+        $type = substr($contents, $offset + 4, 4);
+        if ($size < 8 || $offset + $size > $length) {
+            throw new RuntimeException('Unexpected malformed MP4 box during external-reference fixture construction.');
+        }
+        if ($type === 'mdat') {
+            ensure($size > 8 && ! $found, 'External-reference fixture must contain one nonempty media-data box.');
+            $contents = substr_replace($contents, str_repeat("\0", $size - 8), $offset + 8, $size - 8);
+            $found = true;
+        }
+        $offset += $size;
+    }
+    ensure($found && $offset === $length, 'External-reference fixture did not contain a complete media-data box.');
+
+    return $contents;
 }
 
 function rewriteDurationHeaders(string $contents, int $seconds): string
@@ -676,7 +727,7 @@ function rewriteDurationBoxes(string $bytes, int $start, bool &$found, int $seco
     return $output.substr($bytes, $offset);
 }
 
-function rewriteBoxes(string $bytes, int $start, bool &$found, string $uri): string
+function rewriteBoxes(string $bytes, int $start, bool &$found, string $externalPath): string
 {
     $containers = ['moov', 'trak', 'mdia', 'minf', 'dinf', 'edts', 'stbl'];
     $output = substr($bytes, 0, $start);
@@ -696,11 +747,27 @@ function rewriteBoxes(string $bytes, int $start, bool &$found, string $uri): str
             if ($entryType !== 'url ' || $entrySize !== 12 || substr($entry, 8, 4) !== "\0\0\0\1") {
                 throw new RuntimeException('Synthetic dref was not a self-contained URL entry.');
             }
-            $url = pack('N', 12 + strlen($uri) + 1).'url '."\0\0\0\0".$uri."\0";
-            $box = pack('N', 16 + strlen($url)).'dref'.substr($box, 8, 8).$url;
+            $volume = 'Momento generated volume';
+            $filename = 'synthetic-external-reference.mp4';
+            ensure(strlen($volume) <= 27 && strlen($filename) <= 63, 'Synthetic alias fixture names exceed their fixed fields.');
+            $aliasRecord = str_repeat("\0", 10)
+                .chr(strlen($volume)).str_pad($volume, 27, "\0")
+                .str_repeat("\0", 12)
+                .chr(strlen($filename)).str_pad($filename, 63, "\0")
+                .str_repeat("\0", 16)
+                .pack('n2', 0, 0)
+                .str_repeat("\0", 16);
+            $pathBytes = $externalPath;
+            $aliasRecord .= pack('n2', 2, strlen($pathBytes)).$pathBytes;
+            if (strlen($pathBytes) % 2 !== 0) {
+                $aliasRecord .= "\0";
+            }
+            $aliasRecord .= pack('n2', 0xFFFF, 0);
+            $alias = pack('N', 12 + strlen($aliasRecord)).'alis'."\0\0\0\0".$aliasRecord;
+            $box = pack('N', 16 + strlen($alias)).'dref'.substr($box, 8, 8).$alias;
             $found = true;
         } elseif (in_array($type, $containers, true)) {
-            $rewritten = rewriteBoxes($box, 8, $found, $uri);
+            $rewritten = rewriteBoxes($box, 8, $found, $externalPath);
             $box = pack('N', strlen($rewritten)).$type.substr($rewritten, 8);
         }
         ensure(unpack('Nsize', substr($box, 0, 4))['size'] === strlen($box), 'Dref fixture rewrite produced an inconsistent MP4 box size.');
