@@ -692,7 +692,7 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                                         ? 'Change selected attachments'
                                         : 'Attach photos or videos'
                                 }
-                                className="absolute bottom-0 left-0 min-h-11 min-w-11 rounded-full text-foreground"
+                                className="size-11 shrink-0 rounded-full text-foreground"
                             >
                                 <Paperclip
                                     aria-hidden="true"
@@ -714,7 +714,7 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                             }
                             onKeyDown={handleKeyDown}
                             placeholder="Write a message…"
-                            className={`max-h-[4.5rem] min-h-11 w-full min-w-0 resize-none overflow-y-auto rounded-3xl border-0 bg-transparent py-2 pr-14 ${hasAvailableAttachments ? 'pl-14' : 'pl-4'} text-base leading-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring min-[601px]:text-sm`}
+                            className="block max-h-[4.5rem] min-h-11 min-w-0 flex-1 resize-none overflow-y-auto rounded-3xl border-0 bg-transparent px-3 py-2.5 text-base leading-6 outline-none min-[601px]:text-sm"
                         />
                         {!attachmentFlow.hasFiles &&
                             !attachmentFlow.pending && (
@@ -728,7 +728,7 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                                     size="icon"
                                     aria-label={sendLabel}
                                     title={sendLabel}
-                                    className="absolute right-0 bottom-0 min-h-11 min-w-11 rounded-full text-foreground"
+                                    className="size-11 shrink-0 rounded-full text-foreground"
                                 >
                                     <Send
                                         aria-hidden="true"
