@@ -99,7 +99,7 @@ function probe(string $path, int $wallSeconds): ?array
     return is_array($value) ? $value : null;
 }
 
-function framesHaveInvalidData(string $path, ?int $audioSampleRate): bool
+function framesHaveInvalidData(string $path, ?int $audioSampleRate, ?float $audioPresentationEnd): bool
 {
     $json = runNative([
         FFPROBE,
@@ -133,8 +133,9 @@ function framesHaveInvalidData(string $path, ?int $audioSampleRate): bool
     $audioSampleCount = 0;
     $firstAudioStart = null;
     $maxAudioEnd = null;
+    $maxAudioEndBeforeLast = null;
     $previousAudioTimestamp = null;
-    $lastAudioFrame = null;
+    $lastEffectiveAudioFrame = null;
 
     foreach ($frames as $frame) {
         if (! is_array($frame)) {
@@ -197,12 +198,6 @@ function framesHaveInvalidData(string $path, ?int $audioSampleRate): bool
         $frameEnd = $timestamp + $frameDuration - ($discardPadding / $audioSampleRate);
         $effectiveSamples = $frameSamples - $skipSamples - $discardPadding;
         $audioSampleCount += $effectiveSamples;
-        $lastAudioFrame = [
-            'samples' => $frameSamples,
-            'skipSamples' => $skipSamples,
-            'discardPadding' => $discardPadding,
-            'durationSeconds' => $frameDuration,
-        ];
         $previousAudioTimestamp = $timestamp;
         if ($effectiveSamples === 0) {
             continue;
@@ -213,21 +208,37 @@ function framesHaveInvalidData(string $path, ?int $audioSampleRate): bool
 
         $effectiveAudioFrameCount++;
         $firstAudioStart ??= $frameStart;
+        $maxAudioEndBeforeLast = $maxAudioEnd;
         $maxAudioEnd = $maxAudioEnd === null ? $frameEnd : max($maxAudioEnd, $frameEnd);
+        $lastEffectiveAudioFrame = [
+            'samples' => $frameSamples,
+            'skipSamples' => $skipSamples,
+            'discardPadding' => $discardPadding,
+            'timestamp' => $timestamp,
+            'reportedEnd' => $timestamp + $frameDuration,
+            'effectiveEnd' => $frameEnd,
+        ];
     }
 
     if ($audioSampleRate === null) {
         return false;
     }
 
-    if ($lastAudioFrame !== null
-        && $lastAudioFrame['skipSamples'] === 0
-        && $lastAudioFrame['discardPadding'] === 0
-        && is_finite($lastAudioFrame['durationSeconds'])
-        && $lastAudioFrame['durationSeconds'] > 0) {
-        $presentedSamples = (int) round($lastAudioFrame['durationSeconds'] * $audioSampleRate);
-        if ($presentedSamples >= 1 && $presentedSamples < $lastAudioFrame['samples']) {
-            $audioSampleCount -= $lastAudioFrame['samples'] - $presentedSamples;
+    if ($lastEffectiveAudioFrame !== null
+        && $lastEffectiveAudioFrame['skipSamples'] === 0
+        && $lastEffectiveAudioFrame['discardPadding'] === 0) {
+        $adjustedFinalEnd = $lastEffectiveAudioFrame['effectiveEnd'];
+        if ($audioPresentationEnd !== null
+            && $audioPresentationEnd > $lastEffectiveAudioFrame['timestamp']
+            && $audioPresentationEnd < $lastEffectiveAudioFrame['reportedEnd']) {
+            $adjustedFinalEnd = min($audioPresentationEnd, $adjustedFinalEnd);
+        }
+        $presentedSamples = (int) round(($adjustedFinalEnd - $lastEffectiveAudioFrame['timestamp']) * $audioSampleRate);
+        if ($presentedSamples >= 1 && $presentedSamples < $lastEffectiveAudioFrame['samples']) {
+            $audioSampleCount -= $lastEffectiveAudioFrame['samples'] - $presentedSamples;
+            $maxAudioEnd = $maxAudioEndBeforeLast === null
+                ? $adjustedFinalEnd
+                : max($maxAudioEndBeforeLast, $adjustedFinalEnd);
         }
     }
 
@@ -288,7 +299,7 @@ function runNative(array $arguments, int $wallSeconds, int $cpuSeconds, int $std
 }
 
 /** @param array<string, mixed> $probe */
-/** @return array{width: int, height: int, audioSampleRate: ?int}|null */
+/** @return array{width: int, height: int, audioSampleRate: ?int, audioPresentationEnd: ?float}|null */
 function validInputProbe(array $probe): ?array
 {
     $format = $probe['format'] ?? null;
@@ -352,8 +363,10 @@ function validInputProbe(array $probe): ?array
     }
 
     $audioSampleRate = null;
+    $audioPresentationEnd = null;
     if ($audios !== []) {
         $audioSampleRate = filter_var($audios[0]['sample_rate'] ?? null, FILTER_VALIDATE_INT);
+        $audioStart = numericTimestamp($audios[0]['start_time'] ?? null);
         $audioDuration = numericDuration($audios[0]['duration'] ?? null);
         if (! in_array($audios[0]['codec_name'] ?? null, ['aac', 'mp3'], true)
             || ! is_int($audioSampleRate)
@@ -361,9 +374,18 @@ function validInputProbe(array $probe): ?array
             || ($audioDuration !== null && $audioDuration > MAX_DURATION_SECONDS)) {
             return null;
         }
+        if ($audioStart !== null && $audioDuration !== null) {
+            $presentationEnd = $audioStart + $audioDuration;
+            $audioPresentationEnd = is_finite($presentationEnd) ? $presentationEnd : null;
+        }
     }
 
-    return ['width' => $width, 'height' => $height, 'audioSampleRate' => $audioSampleRate];
+    return [
+        'width' => $width,
+        'height' => $height,
+        'audioSampleRate' => $audioSampleRate,
+        'audioPresentationEnd' => $audioPresentationEnd,
+    ];
 }
 
 function acceptedBrand(string $brand): bool
@@ -634,7 +656,7 @@ try {
         failVideo();
     }
     $failurePhase = 'frame_scan';
-    if (framesHaveInvalidData($inputPath, $dimensions['audioSampleRate'])) {
+    if (framesHaveInvalidData($inputPath, $dimensions['audioSampleRate'], $dimensions['audioPresentationEnd'])) {
         failVideo();
     }
 

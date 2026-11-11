@@ -394,14 +394,19 @@ function syntheticAudioFacts(string $path): array
     }
 
     $formatDuration = syntheticNumber($probe['format']['duration'] ?? null);
-    $audioDuration = $videoStart = $sampleRate = null;
+    $audioDuration = $audioStart = $audioPresentationEnd = $videoStart = $sampleRate = null;
     foreach ($probe['streams'] ?? [] as $stream) {
         if (! is_array($stream)) {
             return ['available' => false];
         }
         if (($stream['codec_type'] ?? null) === 'audio') {
             $sampleRate = filter_var($stream['sample_rate'] ?? null, FILTER_VALIDATE_INT);
+            $audioStart = syntheticNumber($stream['start_time'] ?? null);
             $audioDuration = syntheticNumber($stream['duration'] ?? null);
+            if ($audioStart !== null && $audioDuration !== null) {
+                $presentationEnd = $audioStart + $audioDuration;
+                $audioPresentationEnd = is_finite($presentationEnd) ? $presentationEnd : null;
+            }
         } elseif (($stream['codec_type'] ?? null) === 'video') {
             $videoStart = syntheticNumber($stream['start_time'] ?? null);
         }
@@ -451,6 +456,8 @@ function syntheticAudioFacts(string $path): array
         'available' => $lastAudioFrame !== null,
         'formatDurationSeconds' => $formatDuration,
         'audioDurationSeconds' => $audioDuration,
+        'audioStartSeconds' => $audioStart,
+        'presentationEndSeconds' => $audioPresentationEnd,
         'videoStartSeconds' => $videoStart,
         'firstAudioFrameSeconds' => $firstAudioStart,
         'sampleRate' => $sampleRate,
@@ -562,6 +569,10 @@ function assertShortAudioVideoTimingPreserved(
     if (abs($inputOffset - 0.125) > $timingTolerance || abs($inputOffset - $outputOffset) > $timingTolerance) {
         throw new RuntimeException('Synthetic audible A/V offsets differ: '.json_encode([
             'expectedInputOffset' => 0.125,
+            'inputAudioStart' => $inputFacts['audioStartSeconds'] ?? null,
+            'inputVideoStart' => $inputVideoStart,
+            'outputAudioStart' => $outputFacts['audioStartSeconds'] ?? null,
+            'outputVideoStart' => $outputVideoStart,
             'inputOffset' => $inputOffset,
             'outputOffset' => $outputOffset,
             'tolerance' => $timingTolerance,
