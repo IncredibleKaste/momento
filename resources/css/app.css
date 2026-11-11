@@ -531,17 +531,17 @@
             visibility 0s linear 240ms;
     }
 
-    .momento-rail:is(:hover, :focus-within),
+    .momento-rail:is(:hover, :has(:focus-visible)),
     [data-state='expanded'] > .momento-rail {
         width: 218px;
     }
 
-    .momento-rail:is(:hover, :focus-within) .rail-link,
+    .momento-rail:is(:hover, :has(:focus-visible)) .rail-link,
     [data-state='expanded'] > .momento-rail .rail-link {
         width: 202px;
     }
 
-    .momento-rail:is(:hover, :focus-within) .rail-label,
+    .momento-rail:is(:hover, :has(:focus-visible)) .rail-label,
     [data-state='expanded'] > .momento-rail .rail-label {
         opacity: 1;
         visibility: visible;

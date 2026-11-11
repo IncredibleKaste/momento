@@ -7,7 +7,7 @@ import {
     usePage,
     usePoll,
 } from '@inertiajs/react';
-import { ArrowLeft, Search, Send } from 'lucide-react';
+import { ArrowLeft, Paperclip, Search, Send } from 'lucide-react';
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import InputError from '@/components/input-error';
 import ConversationRequestList, {
@@ -366,12 +366,17 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
     const readLock = useRef(false);
     const pendingRead = useRef(0);
     const composer = useRef<HTMLTextAreaElement>(null);
+    const attachmentInput = useRef<HTMLInputElement>(null);
+    const hasAvailableAttachments =
+        thread.attachmentCapabilities.images ||
+        thread.attachmentCapabilities.video;
     const [failed, setFailed] = useState(false);
     const [attachmentFlow, setAttachmentFlow] = useState({
         hasFiles: false,
         pending: false,
     });
     const form = useForm({ body: '', nonce: crypto.randomUUID() });
+    const sendLabel = form.processing ? 'Sending…' : failed ? 'Retry' : 'Send';
     const readRequest = useHttp();
     const poll = usePoll(
         5000,
@@ -670,6 +675,31 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                         Message to {thread.member.name}
                     </label>
                     <div className="chat-input-shell">
+                        {hasAvailableAttachments && (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                disabled={attachmentFlow.pending}
+                                onClick={() => attachmentInput.current?.click()}
+                                aria-label={
+                                    attachmentFlow.hasFiles
+                                        ? 'Change selected attachments'
+                                        : 'Attach photos or videos'
+                                }
+                                title={
+                                    attachmentFlow.hasFiles
+                                        ? 'Change selected attachments'
+                                        : 'Attach photos or videos'
+                                }
+                                className="absolute bottom-0 left-0 min-h-11 min-w-11 rounded-full text-foreground"
+                            >
+                                <Paperclip
+                                    aria-hidden="true"
+                                    className="size-5"
+                                />
+                            </Button>
+                        )}
                         <textarea
                             ref={composer}
                             id="message-body"
@@ -684,7 +714,7 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                             }
                             onKeyDown={handleKeyDown}
                             placeholder="Write a message…"
-                            className="max-h-[4.5rem] min-h-11 w-full min-w-0 resize-none overflow-y-auto rounded-3xl border-0 bg-transparent py-2 pr-32 pl-4 text-base leading-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring min-[601px]:text-sm"
+                            className={`max-h-[4.5rem] min-h-11 w-full min-w-0 resize-none overflow-y-auto rounded-3xl border-0 bg-transparent py-2 pr-14 ${hasAvailableAttachments ? 'pl-14' : 'pl-4'} text-base leading-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring min-[601px]:text-sm`}
                         />
                         {!attachmentFlow.hasFiles &&
                             !attachmentFlow.pending && (
@@ -695,17 +725,15 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                                         form.data.body.trim().length === 0
                                     }
                                     variant="ghost"
+                                    size="icon"
+                                    aria-label={sendLabel}
+                                    title={sendLabel}
                                     className="absolute right-0 bottom-0 min-h-11 min-w-11 rounded-full text-foreground"
                                 >
                                     <Send
                                         aria-hidden="true"
                                         className="size-5"
                                     />
-                                    {form.processing
-                                        ? 'Sending…'
-                                        : failed
-                                          ? 'Retry'
-                                          : 'Send'}
                                 </Button>
                             )}
                     </div>
@@ -723,6 +751,7 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                         conversationId={thread.id}
                         body={form.data.body}
                         capabilities={thread.attachmentCapabilities}
+                        fileInputRef={attachmentInput}
                         pendingAttachmentSend={thread.pendingAttachmentSend}
                         onSent={() => {
                             form.setData({
@@ -796,7 +825,7 @@ export default function Messages({
                                 Private conversations and message requests.
                             </p>
                         </header>
-                        <div className="grid shrink-0 grid-cols-2 gap-1 rounded-md bg-muted p-1">
+                        <div className="mb-3 grid shrink-0 grid-cols-2 gap-1 rounded-md bg-muted p-1">
                             <button
                                 type="button"
                                 aria-pressed={activeView === 'chats'}

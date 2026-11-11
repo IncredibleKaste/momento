@@ -1,6 +1,12 @@
 import { router, useHttp } from '@inertiajs/react';
-import { Paperclip, Send, X } from 'lucide-react';
-import { ChangeEvent, useEffect, useRef, useState } from 'react';
+import { Send, X } from 'lucide-react';
+import {
+    ChangeEvent,
+    type RefObject,
+    useEffect,
+    useRef,
+    useState,
+} from 'react';
 import { Button } from '@/components/ui/button';
 import messagesRoutes from '@/routes/messages';
 
@@ -97,6 +103,7 @@ type Props = {
     conversationId: number;
     body: string;
     capabilities: AttachmentCapabilities;
+    fileInputRef: RefObject<HTMLInputElement | null>;
     pendingAttachmentSend: PendingAttachmentSend;
     onSent: () => void;
     onFlowChange: (state: { hasFiles: boolean; pending: boolean }) => void;
@@ -157,11 +164,11 @@ export default function AttachmentComposer({
     conversationId,
     body,
     capabilities,
+    fileInputRef,
     pendingAttachmentSend,
     onSent,
     onFlowChange,
 }: Props) {
-    const fileInput = useRef<HTMLInputElement>(null);
     const pollTimer = useRef<number | null>(null);
     const automaticChecks = useRef(0);
     const activeAttempt = useRef<UploadAttempt | null>(null);
@@ -235,7 +242,7 @@ export default function AttachmentComposer({
         setAutomaticChecksPaused(false);
         upload.setData({ body: '', nonce: '', attachments: [] });
         upload.clearErrors();
-        if (fileInput.current) fileInput.current.value = '';
+        if (fileInputRef.current) fileInputRef.current.value = '';
         onSent();
         router.reload({ only: ['thread', 'conversations'] });
     }
@@ -436,7 +443,7 @@ export default function AttachmentComposer({
         setFiles([]);
         setSelectionError(null);
         upload.clearErrors();
-        if (fileInput.current) fileInput.current.value = '';
+        if (fileInputRef.current) fileInputRef.current.value = '';
     }
 
     function selectFiles(event: ChangeEvent<HTMLInputElement>) {
@@ -574,7 +581,8 @@ export default function AttachmentComposer({
                 <>
                     <div className="flex flex-wrap items-center gap-2">
                         <input
-                            ref={fileInput}
+                            ref={fileInputRef}
+                            tabIndex={-1}
                             type="file"
                             multiple
                             accept={availableAcceptTypes.join(',')}
@@ -588,16 +596,6 @@ export default function AttachmentComposer({
                             onChange={selectFiles}
                             className="sr-only"
                         />
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={isPending || supportedKinds.length === 0}
-                            onClick={() => fileInput.current?.click()}
-                            className="min-h-11"
-                        >
-                            <Paperclip aria-hidden="true" />
-                            {files.length > 0 ? 'Change files' : 'Attach files'}
-                        </Button>
                         {files.length > 0 && !isPending && (
                             <Button
                                 type="button"
