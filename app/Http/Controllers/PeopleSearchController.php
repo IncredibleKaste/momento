@@ -51,7 +51,7 @@ class PeopleSearchController extends Controller
                 ->whereRaw("LOWER(photo_posts.caption) LIKE LOWER(?) ESCAPE '!'", ['%'.$literalQuery.'%'])
                 ->orderByDesc('created_at')
                 ->orderByDesc('id')
-                ->cursorPaginate(12, ['photo_posts.id', 'photo_posts.user_id', 'photo_posts.caption', 'photo_posts.created_at'], 'photosCursor', $cursor)
+                ->cursorPaginate(12, ['photo_posts.id', 'photo_posts.user_id', 'photo_posts.caption', 'photo_posts.location', 'photo_posts.created_at'], 'photosCursor', $cursor)
                 ->appends(['q' => $query, 'page' => $people->currentPage()]);
 
             $pageIds = array_values($photoPage->getCollection()
@@ -65,6 +65,7 @@ class PeopleSearchController extends Controller
                 'data' => $photoPage->getCollection()->map(fn (PhotoPost $post): array => [
                     'id' => $post->id,
                     'caption' => $post->caption,
+                    'location' => $post->location,
                     'createdAt' => $post->created_at->toIso8601String(),
                     'author' => ['id' => $post->user->id, 'name' => $post->user->name],
                     'mediaUrl' => route('photo-posts.media', $post),

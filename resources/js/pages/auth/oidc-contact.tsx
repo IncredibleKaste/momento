@@ -6,9 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { login } from '@/routes';
-import { store } from '@/routes/microsoft/contact';
 
-export default function MicrosoftContact({
+export default function OidcContact({
     suggestedName,
     status,
 }: {
@@ -22,10 +21,10 @@ export default function MicrosoftContact({
         <>
             <Head title="Verify your contact email" />
             <p className="mb-6 text-sm text-muted-foreground">
-                Microsoft confirmed your identity. Choose a contact email for
-                your Momento account. We will create the account only after you
-                confirm the address. Open the verification link in this same
-                browser session. Existing accounts are never linked.
+                Your identity provider confirmed your sign-in. Choose a contact
+                email for your Momento account. We create the account only after
+                you confirm the address in this browser session. Existing
+                accounts are never linked.
             </p>
             {status && (
                 <p role="status" aria-live="polite" className="mb-6 text-sm">
@@ -33,14 +32,12 @@ export default function MicrosoftContact({
                 </p>
             )}
             <Form
-                {...store.form()}
+                action="/auth/oidc/contact"
+                method="post"
                 className="flex flex-col gap-6"
                 onError={(errors) => {
-                    if (errors.name) {
-                        name.current?.focus();
-                    } else if (errors.email) {
-                        email.current?.focus();
-                    }
+                    if (errors.name) name.current?.focus();
+                    else if (errors.email) email.current?.focus();
                 }}
             >
                 {({ errors, processing }) => (
@@ -79,17 +76,12 @@ export default function MicrosoftContact({
                                 required
                                 aria-invalid={Boolean(errors.email)}
                                 aria-describedby={
-                                    errors.email
-                                        ? 'contact-help email-error'
-                                        : 'contact-help'
+                                    errors.email ? 'email-error' : undefined
                                 }
                             />
-                            <p
-                                id="contact-help"
-                                className="text-sm text-muted-foreground"
-                            >
-                                Use an address you can access. Existing accounts
-                                are not linked to Microsoft sign-in.
+                            <p className="text-sm text-muted-foreground">
+                                Choose an address you can access. Existing
+                                accounts are not linked to this sign-in.
                             </p>
                             <InputError
                                 id="email-error"
@@ -110,7 +102,7 @@ export default function MicrosoftContact({
     );
 }
 
-MicrosoftContact.layout = {
+OidcContact.layout = {
     title: 'Verify your contact email',
-    description: 'Finish creating your Microsoft account',
+    description: 'Finish setting up your sign-in',
 };

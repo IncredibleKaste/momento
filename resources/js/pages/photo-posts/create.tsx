@@ -17,8 +17,9 @@ export default function CreatePhotoPost({ decoderAvailable, limits }: Props) {
                         Share a photo
                     </h1>
                     <p className="max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-                        Add one photo and an optional caption. Your photo is
-                        checked and prepared before it is available.
+                        Add one photo, an optional caption, and an optional
+                        location label. Your photo is checked and prepared
+                        before it is available.
                     </p>
                 </header>
                 <PhotoPostComposer

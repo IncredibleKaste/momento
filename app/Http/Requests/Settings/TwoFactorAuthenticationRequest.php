@@ -12,7 +12,7 @@ class TwoFactorAuthenticationRequest extends FormRequest
 
     public function authorize(): bool
     {
-        return filled($this->user()->getAuthPassword());
+        return filled($this->user()->getAuthPassword()) && $this->user()->disabled_at === null;
     }
 
     /**

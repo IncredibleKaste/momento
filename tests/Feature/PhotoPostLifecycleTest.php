@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
     $directory = storage_path('framework/testing/photo-decoder-'.Str::random(12));
@@ -80,16 +81,26 @@ function setPhotoDecoderOutput(string $directory, string $output): void
     chmod($script, 0700);
 }
 
+it('provides the optional location character limit to the composer', function () {
+    $this->actingAs(User::factory()->create())
+        ->get(route('photo-posts.create'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('photo-posts/create')
+            ->where('limits.maxLocationCharacters', 100));
+});
+
 it('stores one private staging object and reuses or conflicts on the idempotency key', function () {
     $owner = User::factory()->create();
     $key = (string) Str::uuid();
     $payload = photoPostUpload();
     $payload['idempotency_key'] = $key;
+    $payload['location'] = str_repeat('🌲', 100);
 
     $first = $this->actingAs($owner)->post(route('photo-posts.store'), $payload)->assertRedirect();
     $post = PhotoPost::sole();
     expect($first->headers->get('Location'))->toBe(route('photo-posts.show', $post));
     expect($post->status)->toBe(PhotoPostStatus::Queued)
+        ->and($post->location)->toBe(str_repeat('🌲', 100))
         ->and($post->staging_bytes_charged)->toBeGreaterThan(0)
         ->and($post->raw_key)->toMatch('/^[0-9a-f-]{36}\/original$/');
     Storage::disk('photo_posts')->assertExists($post->raw_key);
@@ -98,16 +109,19 @@ it('stores one private staging object and reuses or conflicts on the idempotency
 
     $retry = photoPostUpload();
     $retry['idempotency_key'] = $key;
+    $retry['location'] = str_repeat('🌲', 100);
     $this->post(route('photo-posts.store'), $retry)->assertRedirect(route('photo-posts.show', $post));
     expect(PhotoPost::count())->toBe(1);
 
     config(['photo_processing.decoder_executable' => null]);
     $sameRetry = photoPostUpload();
     $sameRetry['idempotency_key'] = $key;
+    $sameRetry['location'] = str_repeat('🌲', 100);
     $this->post(route('photo-posts.store'), $sameRetry)->assertRedirect(route('photo-posts.show', $post));
 
     $conflict = photoPostUpload('A quiet morning ');
     $conflict['idempotency_key'] = $key;
+    $conflict['location'] = str_repeat('🌲', 99).'🌳';
     $this->post(route('photo-posts.store'), $conflict)->assertStatus(409);
     expect(PhotoPost::count())->toBe(1);
 });
@@ -132,7 +146,7 @@ it('keeps the same retry key when cleanup is pending and reuses it after verifie
     $payload['idempotency_key'] = $key;
 
     $this->actingAs($owner)->post(route('photo-posts.store'), $payload)
-        ->assertSessionHasErrors(['photo' => 'Cleanup is still pending. Retry shortly with the same photo and caption.']);
+        ->assertSessionHasErrors(['photo' => 'Cleanup is still pending. Retry shortly with the same photo, caption, and location.']);
     expect(PhotoPost::count())->toBe(1)
         ->and($post->fresh()->status)->toBe(PhotoPostStatus::Failed)
         ->and($post->fresh()->attempt_token)->toBe($originalToken)
@@ -151,6 +165,34 @@ it('keeps the same retry key when cleanup is pending and reuses it after verifie
         ->and($post->fresh()->attempt_token)->not->toBe($originalToken)
         ->and($post->fresh()->staging_bytes_charged)->toBeGreaterThan(0)
         ->and($post->fresh()->processed_bytes_charged)->toBe(0);
+});
+
+it('retries the same failed location draft without changing its metadata', function () {
+    $owner = User::factory()->create();
+    $payload = photoPostUpload('A quiet morning');
+    $payload['location'] = 'Near the lake';
+    $key = (string) Str::uuid();
+    $inputHash = hash_file('sha256', $payload['photo']->getRealPath());
+    $fingerprint = hash('sha256', $inputHash."\0".$payload['caption']."\0".$payload['location']);
+    $post = PhotoPost::factory()->for($owner)->create([
+        'idempotency_key' => $key,
+        'request_fingerprint' => $fingerprint,
+        'status' => PhotoPostStatus::Failed,
+        'caption' => $payload['caption'],
+        'location' => $payload['location'],
+        'staging_bytes_charged' => 0,
+        'processed_bytes_charged' => 0,
+        'cleanup_completed_at' => now(),
+    ]);
+    $originalToken = $post->attempt_token;
+    $payload['idempotency_key'] = $key;
+
+    $this->actingAs($owner)->post(route('photo-posts.store'), $payload)
+        ->assertRedirect(route('photo-posts.show', $post));
+
+    expect($post->fresh()->status)->toBe(PhotoPostStatus::Queued)
+        ->and($post->fresh()->location)->toBe('Near the lake')
+        ->and($post->fresh()->attempt_token)->not->toBe($originalToken);
 });
 
 it('publishes only after bounded decoder output inspection and verified raw deletion', function () {
@@ -280,6 +322,69 @@ it('does not release staging capacity while an upload writer still owns its canc
     Storage::disk('photo_posts')->assertMissing($post->raw_key);
 });
 
+it('retains staging charge when raw-file absence cannot be proven after inspection', function () {
+    $post = PhotoPost::factory()->create([
+        'status' => PhotoPostStatus::Queued,
+        'staging_bytes_charged' => 123,
+        'processed_bytes_charged' => 0,
+    ]);
+    $disk = Storage::fake('photo_posts');
+    $disk->put($post->raw_key, 'synthetic raw input');
+    $directory = $disk->path(dirname($post->raw_key));
+    $permissions = fileperms($directory);
+    if (! is_int($permissions) || ! @chmod($directory, 0000)) {
+        test()->markTestSkipped('The test environment cannot change directory permissions.');
+    }
+    try {
+        if (@scandir($directory) !== false) {
+            test()->markTestSkipped('The test process can still read a mode-0000 directory.');
+        }
+    } finally {
+        @chmod($directory, $permissions & 0777);
+    }
+
+    $blockedDuringInspection = false;
+    $realInspector = app(WebpOutputInspector::class);
+    $inspector = Mockery::mock(WebpOutputInspector::class)->makePartial();
+    $inspector->shouldReceive('inspect')->once()->andReturnUsing(function (string $path) use (
+        $realInspector,
+        $directory,
+        &$blockedDuringInspection,
+    ): array {
+        $facts = $realInspector->inspect($path);
+        if (! @chmod($directory, 0000)) {
+            throw new RuntimeException('Could not make the artifact parent unreadable after inspection.');
+        }
+        $blockedDuringInspection = true;
+
+        return $facts;
+    });
+
+    try {
+        (new ProcessPhotoPost($post->id, $post->attempt_token))->handle(
+            app(PhotoDecoder::class),
+            $inspector,
+            app(ManagePhotoPosts::class),
+        );
+        expect($blockedDuringInspection)->toBeTrue()
+            ->and($post->fresh()->status)->toBe(PhotoPostStatus::Failed)
+            ->and($post->fresh()->staging_bytes_charged)->toBe(123)
+            ->and($post->fresh()->processed_bytes_charged)->toBe(0)
+            ->and($post->fresh()->cleanup_completed_at)->toBeNull();
+    } finally {
+        @chmod($directory, $permissions & 0777);
+    }
+
+    expect(is_file($disk->path($post->raw_key)))->toBeTrue()
+        ->and(is_file($disk->path($post->output_key)))->toBeTrue();
+    $post->update(['cleanup_due_at' => now()->subSecond()]);
+    expect(app(ManagePhotoPosts::class)->reconcile())->toBe(1)
+        ->and($post->fresh()->status)->toBe(PhotoPostStatus::Failed)
+        ->and($post->fresh()->staging_bytes_charged)->toBe(0)
+        ->and($post->fresh()->processed_bytes_charged)->toBe(0)
+        ->and($post->fresh()->cleanup_completed_at)->not->toBeNull();
+});
+
 it('uses the same retained operation guard for stale staging cancellation and reconciliation', function () {
     $owner = User::factory()->create();
     $post = PhotoPost::factory()->for($owner)->create([
@@ -360,6 +465,35 @@ it('rejects NUL in captions before admission while preserving ordinary newlines'
     $this->post(route('photo-posts.store'), $valid)->assertRedirect();
 
     expect(PhotoPost::sole()->caption)->toBe($caption);
+});
+
+it('rejects invalid location labels before photo admission', function (mixed $location, string $message) {
+    $payload = photoPostUpload();
+    $payload['location'] = $location;
+    $payload['idempotency_key'] = (string) Str::uuid();
+
+    $this->actingAs(User::factory()->create())
+        ->from(route('photo-posts.create'))
+        ->post(route('photo-posts.store'), $payload)
+        ->assertRedirect(route('photo-posts.create'))
+        ->assertSessionHasErrors(['location' => $message]);
+
+    expect(PhotoPost::count())->toBe(0)
+        ->and(Storage::disk('photo_posts')->allFiles())->toBe([]);
+})->with([
+    'over 100 unicode characters' => [str_repeat('🌲', 101), 'The location field must not be greater than 100 characters.'],
+    'non-string input' => [['somewhere'], 'The location field must be a string.'],
+    'embedded null byte' => ["Place\0name", 'The location field format is invalid.'],
+]);
+
+it('normalizes a blank location to no stored label', function () {
+    $payload = photoPostUpload();
+    $payload['location'] = '   ';
+    $payload['idempotency_key'] = (string) Str::uuid();
+
+    $this->actingAs(User::factory()->create())->post(route('photo-posts.store'), $payload)->assertRedirect();
+
+    expect(PhotoPost::sole()->location)->toBeNull();
 });
 
 it('projects an owner retry key only when cleanup and decoder conditions are satisfied', function () {
@@ -548,21 +682,19 @@ it('retains staging and processed charges when artifact deletion fails, then rel
         'cleanup_due_at' => now()->subSecond(),
         'cleanup_completed_at' => null,
     ]);
-    $root = Storage::disk('photo_posts')->path('');
-    $objects = [$post->raw_key => true, $post->output_key => true];
+    $fakeDisk = Storage::fake('photo_posts');
+    $root = $fakeDisk->path('');
+    $fakeDisk->put($post->raw_key, 'synthetic raw');
+    $fakeDisk->put($post->output_key, 'synthetic partial output');
     $deleteState = ['allowed' => false];
     $disk = Mockery::mock();
     $disk->shouldReceive('path')->andReturnUsing(fn (string $path): string => $root.'/'.$path);
-    $disk->shouldReceive('exists')->andReturnUsing(function (string $key) use (&$objects): bool {
-        return $objects[$key] ?? false;
-    });
-    $disk->shouldReceive('delete')->andReturnUsing(function (string $key) use (&$deleteState, &$objects): bool {
+    $disk->shouldReceive('delete')->andReturnUsing(function (string $key) use (&$deleteState, $root): bool {
         if (! $deleteState['allowed']) {
             return false;
         }
-        unset($objects[$key]);
 
-        return true;
+        return @unlink($root.'/'.$key);
     });
     Storage::shouldReceive('disk')->with('photo_posts')->andReturn($disk);
 

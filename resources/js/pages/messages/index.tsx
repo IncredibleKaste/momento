@@ -10,6 +10,12 @@ import {
 import { ArrowLeft, Search, Send } from 'lucide-react';
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import InputError from '@/components/input-error';
+import ConversationRequestList, {
+    ConversationRequestActionButton,
+    ConversationRequestActions,
+    type ConversationRequestPage,
+} from '@/components/conversation-request-list';
+import MessageRecipientLookup from '@/components/message-recipient-lookup';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { useInitials } from '@/hooks/use-initials';
@@ -19,7 +25,13 @@ import {
     read as markRead,
     send as sendMessage,
     show as messagesShow,
+    store as startMessage,
 } from '@/routes/messages';
+import {
+    reopen as reopenMessageRequest,
+    store as sendMessageRequest,
+    stop as stopMessageRequest,
+} from '@/routes/message-requests';
 
 type ConversationItem = {
     id: number;
@@ -45,6 +57,30 @@ type Thread = {
     nextBefore: number | null;
     isLatestPage: boolean;
     canSend: boolean;
+    requestPermission: { id: number; canStop: boolean; mutual: boolean } | null;
+};
+
+type SelectedRecipient = {
+    id: number;
+    name: string;
+    mode:
+        | 'direct'
+        | 'request'
+        | 'outgoing'
+        | 'incoming'
+        | 'closed'
+        | 'reopen'
+        | 'unavailable';
+    requestId: number | null;
+    conversationId: number | null;
+    canReopen: boolean;
+};
+
+type Requests = {
+    incomingCount: number;
+    outgoingCount: number;
+    incoming: ConversationRequestPage;
+    outgoing: ConversationRequestPage;
 };
 
 type Page<T> = {
@@ -57,7 +93,256 @@ type Props = {
     conversations: Page<ConversationItem>;
     search: string;
     thread: Thread | null;
+    selectedRecipient: SelectedRecipient | null;
+    requests: Requests;
 };
+
+function messageLength(value: string) {
+    return Array.from(value).length;
+}
+
+function RequestComposer({ recipient }: { recipient: SelectedRecipient }) {
+    const composer = useRef<HTMLTextAreaElement>(null);
+    const submitLock = useRef(false);
+    const submittedBody = useRef('');
+    const [failed, setFailed] = useState(false);
+    const [failureNotice, setFailureNotice] = useState<string | null>(null);
+    const form = useForm({ body: '', nonce: crypto.randomUUID() });
+    const count = messageLength(form.data.body);
+
+    function submit(event?: FormEvent) {
+        event?.preventDefault();
+        if (
+            form.processing ||
+            submitLock.current ||
+            form.data.body.trim().length === 0 ||
+            count > 500
+        ) {
+            return;
+        }
+        submitLock.current = true;
+        submittedBody.current = form.data.body;
+        setFailed(false);
+        setFailureNotice(null);
+        form.post(sendMessageRequest.url(recipient.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                form.setData({ body: '', nonce: crypto.randomUUID() });
+                form.clearErrors();
+                setFailed(false);
+                setFailureNotice(null);
+            },
+            onError: () => {
+                setFailed(true);
+                setFailureNotice(null);
+            },
+            onNetworkError: () => {
+                setFailed(true);
+                setFailureNotice(
+                    'Connection interrupted. Your draft is still here; retry with the same text to check whether it was received.',
+                );
+            },
+            onHttpException: (response) => {
+                setFailed(true);
+                setFailureNotice(
+                    response.status === 429
+                        ? 'Too many messages. Wait a minute, then retry the same text.'
+                        : response.status === 419
+                          ? 'Your session needs refreshing. Copy your draft before refreshing.'
+                          : 'The request could not be completed. Your draft is still here; retry the same text to check its status.',
+                );
+            },
+            onFinish: () => {
+                submitLock.current = false;
+            },
+        });
+    }
+
+    function changeDraft(body: string) {
+        if (failed && body !== submittedBody.current) {
+            form.setData('nonce', crypto.randomUUID());
+            form.clearErrors();
+            setFailed(false);
+            setFailureNotice(null);
+        }
+        form.setData('body', body);
+    }
+
+    function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+        if (
+            event.key === 'Enter' &&
+            !event.shiftKey &&
+            !event.nativeEvent.isComposing &&
+            event.nativeEvent.keyCode !== 229
+        ) {
+            event.preventDefault();
+            submit();
+        }
+    }
+
+    return (
+        <form onSubmit={submit} className="w-full max-w-xl space-y-3">
+            <p className="text-sm leading-relaxed text-muted-foreground">
+                Send one plain-text request to {recipient.name}. They can accept
+                or decline it. Attachments are available only after a request is
+                accepted.
+            </p>
+            <InputError
+                id="request-body-error"
+                message={form.errors.body}
+                role="alert"
+            />
+            {failed && (
+                <p role="alert" className="text-sm text-destructive">
+                    {failureNotice ??
+                        'Your draft is still here. Review the message above before trying again.'}
+                </p>
+            )}
+            <label htmlFor="request-body" className="sr-only">
+                Message request to {recipient.name}
+            </label>
+            <textarea
+                ref={composer}
+                id="request-body"
+                rows={4}
+                value={form.data.body}
+                readOnly={form.processing}
+                aria-invalid={Boolean(form.errors.body) || count > 500}
+                aria-describedby={
+                    form.errors.body
+                        ? 'request-body-help request-body-count request-body-error'
+                        : 'request-body-help request-body-count'
+                }
+                onChange={(event) => changeDraft(event.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Write a short introduction…"
+                className="min-h-28 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring min-[601px]:text-sm"
+            />
+            <div className="flex flex-wrap items-start justify-between gap-2">
+                <p
+                    id="request-body-help"
+                    className="text-xs text-muted-foreground"
+                >
+                    Plain text only. Enter sends; Shift+Enter adds a line.
+                </p>
+                <p
+                    id="request-body-count"
+                    aria-live="polite"
+                    className={`text-xs ${count > 500 ? 'text-destructive' : 'text-muted-foreground'}`}
+                >
+                    {count}/500 characters
+                </p>
+            </div>
+            <Button
+                type="submit"
+                disabled={
+                    form.processing ||
+                    form.data.body.trim().length === 0 ||
+                    count > 500
+                }
+                className="min-h-11"
+            >
+                {form.processing
+                    ? 'Sending…'
+                    : failed
+                      ? 'Retry request'
+                      : 'Send request'}
+            </Button>
+        </form>
+    );
+}
+
+function SelectedRecipientPanel({
+    recipient,
+    requests,
+}: {
+    recipient: SelectedRecipient;
+    requests: Requests;
+}) {
+    const matchingRequest = [
+        ...requests.incoming.data,
+        ...requests.outgoing.data,
+    ].find((request) => request.id === recipient.requestId);
+
+    return (
+        <section className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
+            <Link
+                href={messagesIndex()}
+                prefetch={false}
+                className="inline-flex min-h-11 items-center text-sm underline underline-offset-4 min-[601px]:hidden"
+            >
+                Back to messages
+            </Link>
+            <h2 className="font-serif text-3xl font-medium wrap-anywhere">
+                {recipient.name}
+            </h2>
+            {recipient.mode === 'direct' ? (
+                recipient.conversationId ? (
+                    <Link
+                        href={messagesShow(recipient.conversationId)}
+                        prefetch={false}
+                        className="inline-flex min-h-11 items-center rounded-md border border-border bg-card px-4 text-sm underline underline-offset-4"
+                    >
+                        Open conversation
+                    </Link>
+                ) : (
+                    <Link
+                        href={startMessage(recipient.id)}
+                        method="post"
+                        as="button"
+                        prefetch={false}
+                        className="inline-flex min-h-11 items-center rounded-md border border-border bg-card px-4 text-sm underline underline-offset-4"
+                    >
+                        Start conversation
+                    </Link>
+                )
+            ) : recipient.mode === 'request' ? (
+                <RequestComposer recipient={recipient} />
+            ) : matchingRequest ? (
+                <div className="w-full max-w-xl space-y-3 text-left">
+                    <p className="text-sm text-muted-foreground">
+                        {recipient.mode === 'incoming'
+                            ? 'This member sent a message request.'
+                            : recipient.mode === 'outgoing'
+                              ? 'Your request is waiting for a response.'
+                              : recipient.mode === 'reopen'
+                                ? 'Allow this member to send you a new message request.'
+                                : 'This request is closed. The original recipient must allow a new request before you can send again.'}
+                    </p>
+                    <p className="rounded-md border border-border bg-card p-4 text-sm wrap-anywhere whitespace-pre-wrap">
+                        {matchingRequest.body}
+                    </p>
+                    <ConversationRequestActions request={matchingRequest} />
+                </div>
+            ) : recipient.mode === 'reopen' &&
+              recipient.canReopen &&
+              recipient.requestId ? (
+                <ConversationRequestActionButton
+                    action={reopenMessageRequest.form(recipient.requestId)}
+                    label="Allow a new request"
+                />
+            ) : recipient.mode === 'incoming' ? (
+                <p className="text-sm text-muted-foreground">
+                    Open the Requests tab to review this message request.
+                </p>
+            ) : recipient.mode === 'outgoing' ? (
+                <p className="text-sm text-muted-foreground">
+                    Your request is waiting for a response. You can manage it in
+                    the Requests tab.
+                </p>
+            ) : recipient.mode === 'closed' || recipient.mode === 'reopen' ? (
+                <p className="text-sm text-muted-foreground">
+                    This request is closed. The original recipient must allow a
+                    new request before another can be sent.
+                </p>
+            ) : (
+                <p className="text-sm text-muted-foreground">
+                    Messaging is unavailable for this member.
+                </p>
+            )}
+        </section>
+    );
+}
 
 function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
     const { auth } = usePage().props;
@@ -256,6 +541,25 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                     </span>
                 )}
             </header>
+            {thread.requestPermission?.canStop && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+                    <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
+                        This conversation was approved from a message request.
+                        {thread.requestPermission.mutual
+                            ? ' Mutual following may still allow messages after request approval ends.'
+                            : ' Ending approval stops new messages but keeps this history.'}
+                    </p>
+                    <div className="shrink-0">
+                        <ConversationRequestActionButton
+                            action={stopMessageRequest.form(
+                                thread.requestPermission.id,
+                            )}
+                            label="End request approval"
+                            variant="outline"
+                        />
+                    </div>
+                </div>
+            )}
             <div
                 ref={log}
                 onScroll={(event) => {
@@ -387,25 +691,39 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
             ) : (
                 <p className="border-t border-border p-4 text-sm text-muted-foreground">
                     You can read this conversation, but new messages are
-                    unavailable because both members must be verified and follow
-                    each other.
+                    unavailable under the current messaging permissions.
                 </p>
             )}
         </section>
     );
 }
 
-export default function Messages({ conversations, search, thread }: Props) {
+export default function Messages({
+    conversations,
+    search,
+    thread,
+    selectedRecipient,
+    requests,
+}: Props) {
     const { auth } = usePage().props;
     const initials = useInitials();
     const [query, setQuery] = useState(search);
+    const [recipientQuery, setRecipientQuery] = useState('');
+    const [activeView, setActiveView] = useState<'chats' | 'requests'>('chats');
 
     useEffect(() => setQuery(search), [search]);
 
     function searchConversations(event: FormEvent) {
         event.preventDefault();
         router.get(
-            messagesIndex.url({ query: query ? { q: query } : {} }),
+            messagesIndex.url({
+                query: {
+                    ...(query ? { q: query } : {}),
+                    ...(selectedRecipient
+                        ? { recipient: selectedRecipient.id }
+                        : {}),
+                },
+            }),
             {},
             { preserveState: true, replace: true },
         );
@@ -418,138 +736,193 @@ export default function Messages({ conversations, search, thread }: Props) {
                 <h1 className="sr-only">Messages</h1>
                 <div className="chat-layout">
                     <aside
-                        className={`chat-conversations ${thread ? 'hidden min-[601px]:flex' : 'flex'}`}
-                        aria-label="Existing conversations"
+                        className={`chat-conversations ${thread || selectedRecipient ? 'hidden min-[601px]:flex' : 'flex'}`}
+                        aria-label="Messaging"
                     >
                         <header className="mb-[22px] min-w-0 shrink-0">
                             <p className="text-lg font-bold wrap-anywhere">
                                 {auth.user.name}
                             </p>
                             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                                Private conversations with members who follow
-                                each other.
+                                Private conversations and message requests.
                             </p>
                         </header>
-                        <form
-                            onSubmit={searchConversations}
-                            className="flex shrink-0 items-center rounded-full border border-border bg-card pl-3.5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring"
-                        >
-                            <label
-                                htmlFor="conversation-search"
-                                className="sr-only"
+                        <div className="grid shrink-0 grid-cols-2 gap-1 rounded-md bg-muted p-1">
+                            <button
+                                type="button"
+                                aria-pressed={activeView === 'chats'}
+                                onClick={() => setActiveView('chats')}
+                                className={`min-h-11 rounded px-2 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${activeView === 'chats' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'}`}
                             >
-                                Search conversations by member name
-                            </label>
-                            <input
-                                id="conversation-search"
-                                type="search"
-                                value={query}
-                                onChange={(event) =>
-                                    setQuery(event.target.value)
-                                }
-                                maxLength={80}
-                                placeholder="Search names"
-                                className="min-h-11 min-w-0 flex-1 border-0 bg-transparent text-base outline-none min-[601px]:text-sm"
-                            />
-                            <Button
-                                type="submit"
-                                variant="ghost"
-                                size="icon"
-                                className="size-11 shrink-0 rounded-full"
-                                aria-label="Search conversations"
+                                Chats
+                            </button>
+                            <button
+                                type="button"
+                                aria-pressed={activeView === 'requests'}
+                                onClick={() => setActiveView('requests')}
+                                className={`min-h-11 rounded px-2 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${activeView === 'requests' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'}`}
                             >
-                                <Search aria-hidden="true" className="size-5" />
-                            </Button>
-                        </form>
-                        <h2 className="mt-6 mb-3 shrink-0 text-[15px] font-semibold">
-                            Chats
-                        </h2>
-                        <div className="shrink-0 grow">
-                            {conversations.data.length === 0 ? (
-                                <p className="px-2 py-4 text-xs leading-relaxed text-muted-foreground">
-                                    {search
-                                        ? 'No existing conversations match that name.'
-                                        : 'No conversations yet. Visit a mutually followed member’s profile to message them.'}
-                                </p>
-                            ) : (
-                                <ul>
-                                    {conversations.data.map((item) => (
-                                        <li key={item.id}>
-                                            <Link
-                                                href={messagesShow(item.id, {
-                                                    query: search
-                                                        ? { q: search }
-                                                        : {},
-                                                })}
-                                                prefetch={false}
-                                                aria-current={
-                                                    thread?.id === item.id
-                                                        ? 'page'
-                                                        : undefined
-                                                }
-                                                className={`flex min-h-[70px] items-center gap-[11px] rounded-md px-2 py-3.5 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring ${thread?.id === item.id ? 'bg-muted' : ''}`}
-                                            >
-                                                <Avatar
-                                                    aria-hidden="true"
-                                                    className="size-[42px] shrink-0"
-                                                >
-                                                    <AvatarFallback className="text-sm">
-                                                        {initials(
-                                                            item.member.name,
-                                                        )}
-                                                    </AvatarFallback>
-                                                </Avatar>
-                                                <div className="min-w-0 flex-1">
-                                                    <span className="block truncate text-[13px] font-bold">
-                                                        {item.member.name}
-                                                    </span>
-                                                    <p className="mt-1.5 truncate text-xs text-muted-foreground">
-                                                        {item.latestMessage
-                                                            ?.body ??
-                                                            'Conversation started'}
-                                                    </p>
-                                                </div>
-                                                {item.unreadCount > 0 && (
-                                                    <span
-                                                        aria-label={`${item.unreadCount} unread messages`}
-                                                        className="chat-unread"
-                                                    >
-                                                        {item.unreadCount}
-                                                    </span>
-                                                )}
-                                            </Link>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
+                                Requests ({requests.incomingCount})
+                            </button>
                         </div>
-                        {(conversations.prev_page_url ||
-                            conversations.next_page_url) && (
-                            <nav
-                                aria-label="Conversation pages"
-                                className="flex shrink-0 justify-between py-2"
-                            >
-                                {conversations.prev_page_url && (
-                                    <Link
-                                        href={conversations.prev_page_url}
-                                        preserveScroll
-                                        prefetch={false}
-                                        className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                        {activeView === 'chats' ? (
+                            <>
+                                <form
+                                    onSubmit={searchConversations}
+                                    className="flex shrink-0 items-center rounded-full border border-border bg-card pl-3.5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring"
+                                >
+                                    <label
+                                        htmlFor="conversation-search"
+                                        className="sr-only"
                                     >
-                                        Previous
-                                    </Link>
-                                )}
-                                {conversations.next_page_url && (
-                                    <Link
-                                        href={conversations.next_page_url}
-                                        preserveScroll
-                                        prefetch={false}
-                                        className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                                        Search conversations by member name
+                                    </label>
+                                    <input
+                                        id="conversation-search"
+                                        type="search"
+                                        value={query}
+                                        onChange={(event) =>
+                                            setQuery(event.target.value)
+                                        }
+                                        maxLength={80}
+                                        placeholder="Search names"
+                                        className="min-h-11 min-w-0 flex-1 border-0 bg-transparent text-base outline-none min-[601px]:text-sm"
+                                    />
+                                    <Button
+                                        type="submit"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="size-11 shrink-0 rounded-full"
+                                        aria-label="Search conversations"
                                     >
-                                        Next
-                                    </Link>
+                                        <Search
+                                            aria-hidden="true"
+                                            className="size-5"
+                                        />
+                                    </Button>
+                                </form>
+                                <MessageRecipientLookup
+                                    search={recipientQuery}
+                                    onSearchChange={setRecipientQuery}
+                                />
+                                <h2 className="mt-6 mb-3 shrink-0 text-[15px] font-semibold">
+                                    Chats
+                                </h2>
+                                <div className="shrink-0 grow">
+                                    {conversations.data.length === 0 ? (
+                                        <p className="px-2 py-4 text-xs leading-relaxed text-muted-foreground">
+                                            {search
+                                                ? 'No existing conversations match that name.'
+                                                : 'No conversations yet. Visit a mutually followed member’s profile to message them.'}
+                                        </p>
+                                    ) : (
+                                        <ul>
+                                            {conversations.data.map((item) => (
+                                                <li key={item.id}>
+                                                    <Link
+                                                        href={messagesShow(
+                                                            item.id,
+                                                            {
+                                                                query: search
+                                                                    ? {
+                                                                          q: search,
+                                                                      }
+                                                                    : {},
+                                                            },
+                                                        )}
+                                                        prefetch={false}
+                                                        aria-current={
+                                                            thread?.id ===
+                                                            item.id
+                                                                ? 'page'
+                                                                : undefined
+                                                        }
+                                                        className={`flex min-h-[70px] items-center gap-[11px] rounded-md px-2 py-3.5 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring ${thread?.id === item.id ? 'bg-muted' : ''}`}
+                                                    >
+                                                        <Avatar
+                                                            aria-hidden="true"
+                                                            className="size-[42px] shrink-0"
+                                                        >
+                                                            <AvatarFallback className="text-sm">
+                                                                {initials(
+                                                                    item.member
+                                                                        .name,
+                                                                )}
+                                                            </AvatarFallback>
+                                                        </Avatar>
+                                                        <div className="min-w-0 flex-1">
+                                                            <span className="block truncate text-[13px] font-bold">
+                                                                {
+                                                                    item.member
+                                                                        .name
+                                                                }
+                                                            </span>
+                                                            <p className="mt-1.5 truncate text-xs text-muted-foreground">
+                                                                {item
+                                                                    .latestMessage
+                                                                    ?.body ??
+                                                                    'Conversation started'}
+                                                            </p>
+                                                        </div>
+                                                        {item.unreadCount >
+                                                            0 && (
+                                                            <span
+                                                                aria-label={`${item.unreadCount} unread messages`}
+                                                                className="chat-unread"
+                                                            >
+                                                                {
+                                                                    item.unreadCount
+                                                                }
+                                                            </span>
+                                                        )}
+                                                    </Link>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                                {(conversations.prev_page_url ||
+                                    conversations.next_page_url) && (
+                                    <nav
+                                        aria-label="Conversation pages"
+                                        className="flex shrink-0 justify-between py-2"
+                                    >
+                                        {conversations.prev_page_url && (
+                                            <Link
+                                                href={
+                                                    conversations.prev_page_url
+                                                }
+                                                preserveScroll
+                                                prefetch={false}
+                                                className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                                            >
+                                                Previous
+                                            </Link>
+                                        )}
+                                        {conversations.next_page_url && (
+                                            <Link
+                                                href={
+                                                    conversations.next_page_url
+                                                }
+                                                preserveScroll
+                                                prefetch={false}
+                                                className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                                            >
+                                                Next
+                                            </Link>
+                                        )}
+                                    </nav>
                                 )}
-                            </nav>
+                            </>
+                        ) : (
+                            <div className="min-h-0 flex-1 overflow-y-auto pt-4">
+                                <ConversationRequestList
+                                    incoming={requests.incoming}
+                                    outgoing={requests.outgoing}
+                                    incomingCount={requests.incomingCount}
+                                    outgoingCount={requests.outgoingCount}
+                                />
+                            </div>
                         )}
                         <Link
                             href={dashboard()}
@@ -560,13 +933,18 @@ export default function Messages({ conversations, search, thread }: Props) {
                         </Link>
                     </aside>
                     <div
-                        className={`chat-panel min-h-0 min-w-0 ${thread ? 'block' : 'hidden min-[601px]:block'}`}
+                        className={`chat-panel min-h-0 min-w-0 ${thread || selectedRecipient ? 'block' : 'hidden min-[601px]:block'}`}
                     >
                         {thread ? (
                             <ThreadPanel
                                 key={thread.id}
                                 thread={thread}
                                 search={search}
+                            />
+                        ) : selectedRecipient ? (
+                            <SelectedRecipientPanel
+                                recipient={selectedRecipient}
+                                requests={requests}
                             />
                         ) : (
                             <div className="flex h-full flex-col items-center justify-center gap-3 p-[30px] text-center">

@@ -66,9 +66,9 @@ it('does not grant an unverified viewer a query over private posts', function ()
 });
 
 it('serializes only public post fields even when its author relation is loaded', function () {
-    $post = PhotoPost::factory()->create(['status' => PhotoPostStatus::Ready]);
+    $post = PhotoPost::factory()->create(['status' => PhotoPostStatus::Ready, 'location' => null]);
     $keys = array_keys($post->load('user')->toArray());
     sort($keys);
 
-    expect($keys)->toBe(['caption', 'created_at', 'id', 'status', 'updated_at', 'user_id']);
+    expect($keys)->toBe(['caption', 'created_at', 'id', 'location', 'status', 'updated_at', 'user_id']);
 });

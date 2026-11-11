@@ -19,6 +19,7 @@ it('shows an owner only their ready photos through an allowlisted projection', f
     $ownPost = PhotoPost::factory()->for($owner)->create([
         'status' => PhotoPostStatus::Ready,
         'caption' => 'A shared caption',
+        'location' => 'Waterfront',
     ]);
     PhotoPost::factory()->for($owner)->create([
         'status' => PhotoPostStatus::Queued,
@@ -37,6 +38,7 @@ it('shows an owner only their ready photos through an allowlisted projection', f
             ->where('photos.data', [[
                 'id' => $ownPost->id,
                 'caption' => 'A shared caption',
+                'location' => 'Waterfront',
                 'createdAt' => $ownPost->created_at->toIso8601String(),
                 'mediaUrl' => route('photo-posts.media', $ownPost->id),
                 'detailUrl' => route('photo-posts.show', $ownPost->id),
@@ -58,6 +60,7 @@ it('shows ready profile photos only to the currently approved directional follow
     $post = PhotoPost::factory()->for($author)->create([
         'status' => PhotoPostStatus::Ready,
         'caption' => 'Approved photo caption',
+        'location' => 'Private location label',
     ]);
     match ($relationship) {
         'approved' => Follow::factory()->approved()->create([
@@ -80,6 +83,7 @@ it('shows ready profile photos only to the currently approved directional follow
             ->where('member', ['id' => $author->id, 'name' => $author->name])
             ->where('photos.data.0.id', $post->id)
             ->where('photos.data.0.caption', 'Approved photo caption')
+            ->where('photos.data.0.location', 'Private location label')
             ->where('photos.data.0.mediaUrl', route('photo-posts.media', $post->id))
             ->where('photos.data.0.detailUrl', route('photo-posts.show', $post->id)));
 
@@ -99,6 +103,7 @@ it('removes photo props after approval is removed while retaining the minimal me
     $post = PhotoPost::factory()->for($follow->followed)->create([
         'status' => PhotoPostStatus::Ready,
         'caption' => 'Revoked caption canary',
+        'location' => 'Revoked location canary',
     ]);
     Storage::fake('photo_posts')->put($post->output_key, 'private profile photo bytes');
     $url = route('members.show', $follow->followed);
@@ -114,11 +119,13 @@ it('removes photo props after approval is removed while retaining the minimal me
             ->where('member', ['id' => $follow->followed_id, 'name' => $follow->followed->name])
             ->where('follow', null)
             ->missing('photos')
-            ->missing('Revoked caption canary'));
+            ->missing('Revoked caption canary')
+            ->missing('Revoked location canary'));
     $this->get($mediaUrl)->assertNotFound();
     $this->head($mediaUrl)->assertNotFound();
     $this->withHeader('Range', 'bytes=0-3')->get($mediaUrl)->assertNotFound();
-    $this->getJson(route('photo-posts.show', $post))->assertNotFound()->assertDontSee('Revoked caption canary');
+    $this->getJson(route('photo-posts.show', $post))->assertNotFound()
+        ->assertDontSee('Revoked caption canary')->assertDontSee('Revoked location canary');
 });
 
 it('paginates newest first by timestamp and unique id without exposing totals', function () {

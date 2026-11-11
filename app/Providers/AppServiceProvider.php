@@ -4,7 +4,7 @@ namespace App\Providers;
 
 use App\Auth\LocalCredentialUserProvider;
 use App\Models\User;
-use App\Services\MicrosoftOidc;
+use App\Services\OidcAuthentication;
 use Carbon\CarbonImmutable;
 use GuzzleHttp\Client;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -24,8 +24,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->bind(MicrosoftOidc::class, fn () => new MicrosoftOidc(new Client([
-            'timeout' => 10, 'connect_timeout' => 3, 'allow_redirects' => false,
+        $this->app->singleton(OidcAuthentication::class, fn (): OidcAuthentication => new OidcAuthentication(new Client([
+            'connect_timeout' => 3,
+            'timeout' => 10,
+            'allow_redirects' => false,
         ])));
     }
 
@@ -59,6 +61,9 @@ class AppServiceProvider extends ServiceProvider
 
                 return response()->json(['message' => $message], 429, $headers);
             }));
+        RateLimiter::for('message-request-actions', fn (Request $request): Limit => Limit::perMinute(60)
+            ->by('message-request-actions:'.$request->user()->getAuthIdentifier())
+            ->response($this->messageRequestActionLimitResponse(...)));
         RateLimiter::for('people-search', fn (Request $request): Limit => Limit::perMinute(60)
             ->by('people-search:'.$request->user()->getAuthIdentifier()));
         RateLimiter::for('photo-posts', fn (Request $request): Limit => Limit::perMinute(5)
@@ -79,6 +84,17 @@ class AppServiceProvider extends ServiceProvider
         $message = 'Too many follow changes. Wait a minute, then refresh and try again.';
         if ($request->header('X-Inertia')) {
             return to_route('following.index')->withErrors(['follow' => $message])->withHeaders($headers);
+        }
+
+        return response()->json(['message' => $message], 429, $headers);
+    }
+
+    /** @param array<string, int|string> $headers */
+    private function messageRequestActionLimitResponse(Request $request, array $headers): Response
+    {
+        $message = 'Too many request changes. Wait a minute, then try again.';
+        if ($request->header('X-Inertia')) {
+            return to_route('messages.index')->withErrors(['request' => $message])->withHeaders($headers);
         }
 
         return response()->json(['message' => $message], 429, $headers);

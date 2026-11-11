@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\Auth\MicrosoftAuthenticationController;
+use App\Http\Controllers\Auth\OidcAuthenticationController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmailUpdatesUnsubscribeController;
@@ -31,8 +31,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('people', PeopleSearchController::class)->middleware('throttle:people-search')->name('people.index');
     Route::get('following', [FollowController::class, 'index'])->name('following.index');
     Route::get('messages', [ConversationController::class, 'index'])->name('messages.index');
+    Route::get('messages/recipients', [ConversationController::class, 'recipients'])->middleware('throttle:people-search')->name('messages.recipients');
     Route::get('messages/{conversation}', [ConversationController::class, 'show'])->whereNumber('conversation')->name('messages.show');
     Route::post('members/{member}/messages', [ConversationController::class, 'store'])->whereNumber('member')->name('messages.store');
+    Route::post('messages/requests/{member}', [ConversationController::class, 'sendRequest'])->whereNumber('member')->middleware('throttle:message-send')->name('message-requests.store');
+    Route::post('message-requests/{conversationRequest}/accept', [ConversationController::class, 'acceptRequest'])->whereNumber('conversationRequest')->middleware('throttle:message-request-actions')->name('message-requests.accept');
+    Route::post('message-requests/{conversationRequest}/decline', [ConversationController::class, 'declineRequest'])->whereNumber('conversationRequest')->middleware('throttle:message-request-actions')->name('message-requests.decline');
+    Route::post('message-requests/{conversationRequest}/stop', [ConversationController::class, 'stopRequest'])->whereNumber('conversationRequest')->middleware('throttle:message-request-actions')->name('message-requests.stop');
+    Route::post('message-requests/{conversationRequest}/reopen', [ConversationController::class, 'reopenRequest'])->whereNumber('conversationRequest')->middleware('throttle:message-request-actions')->name('message-requests.reopen');
     Route::post('messages/{conversation}/send', [ConversationController::class, 'send'])->whereNumber('conversation')->middleware('throttle:message-send')->name('messages.send');
     Route::post('messages/{conversation}/read/{message}', [ConversationController::class, 'read'])
         ->whereNumber('conversation')->whereNumber('message')->name('messages.read');
@@ -46,15 +52,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 Route::middleware(['guest', 'throttle:10,1'])->group(function (): void {
-    Route::get('auth/microsoft', [MicrosoftAuthenticationController::class, 'index'])->name('microsoft.index');
-    Route::post('auth/microsoft/organizations/{organization}', [MicrosoftAuthenticationController::class, 'start'])->name('microsoft.start');
-    Route::get('auth/microsoft/callback', [MicrosoftAuthenticationController::class, 'callback'])->name('microsoft.callback');
-    Route::get('auth/microsoft/contact', [MicrosoftAuthenticationController::class, 'contact'])->name('microsoft.contact');
-    Route::post('auth/microsoft/contact', [MicrosoftAuthenticationController::class, 'storeContact'])->name('microsoft.contact.store');
-    Route::get('auth/microsoft/contact/verify/{proof}', [MicrosoftAuthenticationController::class, 'verifyContact'])
-        ->middleware('signed')->name('microsoft.contact.verify');
-    Route::post('auth/microsoft/contact/verify/{proof}', [MicrosoftAuthenticationController::class, 'completeContact'])
-        ->middleware('signed')->name('microsoft.contact.complete');
+    Route::get('auth/oidc/{provider}/start', [OidcAuthenticationController::class, 'start'])
+        ->where('provider', 'google|switch')->block(45, 10)->name('oidc.start');
+    Route::get('auth/oidc/{provider}/callback', [OidcAuthenticationController::class, 'callback'])
+        ->where('provider', 'google|switch')->block(45, 10)->name('oidc.callback');
+    Route::get('auth/microsoft', [OidcAuthenticationController::class, 'microsoftIndex'])->name('microsoft.index');
+    Route::post('auth/microsoft/organizations/{organization}', [OidcAuthenticationController::class, 'startMicrosoft'])
+        ->where('organization', '[a-z0-9-]{1,40}')->block(45, 10)->name('microsoft.start');
+    Route::get('auth/microsoft/callback', [OidcAuthenticationController::class, 'microsoftCallback'])->block(45, 10)->name('microsoft.callback');
+    Route::get('auth/oidc/contact', [OidcAuthenticationController::class, 'contact'])->block(45, 10)->name('oidc.contact');
+    Route::post('auth/oidc/contact', [OidcAuthenticationController::class, 'storeContact'])->block(45, 10)->name('oidc.contact.store');
+    Route::get('auth/oidc/contact/verify/{proof}', [OidcAuthenticationController::class, 'verifyContact'])
+        ->middleware('signed')->block(45, 10)->name('oidc.contact.verify');
+    Route::post('auth/oidc/contact/verify/{proof}', [OidcAuthenticationController::class, 'completeContact'])
+        ->middleware('signed')->block(45, 10)->name('oidc.contact.complete');
 });
 
 require __DIR__.'/settings.php';

@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -21,18 +22,19 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property int $id
  * @property string $name
  * @property string $email
- * @property Carbon|null $disabled_at
  * @property Carbon|null $email_verified_at
  * @property string|null $password
+ * @property Carbon|null $disabled_at
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes
  * @property Carbon|null $two_factor_confirmed_at
  * @property bool $product_news_opt_in
+ * @property bool $message_requests_enabled
  * @property string|null $remember_token
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable(['name', 'email', 'password', 'message_requests_enabled'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 {
@@ -43,6 +45,12 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     protected function email(): Attribute
     {
         return Attribute::make(set: fn (string $value): string => mb_strtolower(trim($value)));
+    }
+
+    /** @return HasOne<OidcIdentity, $this> */
+    public function oidcIdentity(): HasOne
+    {
+        return $this->hasOne(OidcIdentity::class);
     }
 
     public function sendEmailVerificationNotification(): void
@@ -68,6 +76,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
             'product_news_opt_in' => 'boolean',
+            'message_requests_enabled' => 'boolean',
         ];
     }
 }

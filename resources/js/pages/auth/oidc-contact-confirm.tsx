@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { login } from '@/routes';
 
-export default function MicrosoftContactConfirm({
+export default function OidcContactConfirm({
     email,
     confirmUrl,
 }: {
@@ -15,8 +15,8 @@ export default function MicrosoftContactConfirm({
             <Head title="Confirm contact email" />
             <p className="mb-6 text-sm text-muted-foreground">
                 Confirm <span className="break-all">{email}</span> to create
-                your Microsoft-only Momento account. This confirmation must be
-                completed in the browser session that started Microsoft sign-in.
+                your account. Complete this step in the browser session that
+                started sign-in.
             </p>
             <Form
                 action={confirmUrl}
@@ -40,7 +40,7 @@ export default function MicrosoftContactConfirm({
     );
 }
 
-MicrosoftContactConfirm.layout = {
+OidcContactConfirm.layout = {
     title: 'Confirm your contact email',
-    description: 'Finish setting up your Microsoft sign-in',
+    description: 'Finish setting up your sign-in',
 };

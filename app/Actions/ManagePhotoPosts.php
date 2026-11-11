@@ -19,8 +19,10 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ManagePhotoPosts
 {
-    public function submit(User $owner, UploadedFile $photo, ?string $caption, string $idempotencyKey): PhotoPost
+    public function submit(User $owner, UploadedFile $photo, ?string $caption, string $idempotencyKey, ?string $location = null): PhotoPost
     {
+        $location = $location === null ? null : trim($location);
+        $location = $location === '' ? null : $location;
         $bytes = $photo->getSize();
         if (! is_int($bytes) || $bytes < 1 || $bytes > config('photo_processing.max_input_bytes')) {
             throw ValidationException::withMessages(['photo' => 'Choose a photo no larger than 20 MB.']);
@@ -35,14 +37,18 @@ class ManagePhotoPosts
         if (! is_string($contentHash)) {
             throw new PhotoDecoderException(PhotoPostFailure::StorageUnavailable);
         }
-        $fingerprint = hash('sha256', $contentHash."\0".($caption ?? ''));
+        $fingerprintInput = $contentHash."\0".($caption ?? '');
+        if ($location !== null) {
+            $fingerprintInput .= "\0".$location;
+        }
+        $fingerprint = hash('sha256', $fingerprintInput);
 
         $attemptToken = (string) Str::uuid();
         $disk = Storage::disk('photo_posts');
         $rawKey = $attemptToken.'/original';
         $outputKey = $attemptToken.'/processed.webp';
 
-        $post = DB::transaction(function () use ($owner, $idempotencyKey, $fingerprint, $attemptToken, $rawKey, $outputKey, $bytes, $caption): PhotoPost {
+        $post = DB::transaction(function () use ($owner, $idempotencyKey, $fingerprint, $attemptToken, $rawKey, $outputKey, $bytes, $caption, $location): PhotoPost {
             DB::table('photo_upload_capacity')->where('id', 1)->lockForUpdate()->first();
             $lockedOwner = User::query()->lockForUpdate()->findOrFail($owner->id);
             $existing = PhotoPost::query()->where('user_id', $lockedOwner->id)
@@ -53,7 +59,7 @@ class ManagePhotoPosts
                     throw new HttpException(409, 'This photo post was removed. Start a new post with a new upload key.');
                 }
                 if (! hash_equals($existing->request_fingerprint, $fingerprint)) {
-                    throw new HttpException(409, 'This retry key belongs to different photo or caption content.');
+                    throw new HttpException(409, 'This retry key belongs to different photo, caption, or location content.');
                 }
                 if (! $existing->status->isFailedOrCancelled()) {
                     return $existing;
@@ -61,7 +67,7 @@ class ManagePhotoPosts
                 if ($existing->cleanup_completed_at === null || $existing->staging_bytes_charged !== 0
                     || $existing->processed_bytes_charged !== 0) {
                     throw ValidationException::withMessages([
-                        'photo' => 'Cleanup is still pending. Retry shortly with the same photo and caption.',
+                        'photo' => 'Cleanup is still pending. Retry shortly with the same photo, caption, and location.',
                     ]);
                 }
             }
@@ -96,6 +102,7 @@ class ManagePhotoPosts
                     'attempt_token' => $attemptToken,
                     'status' => PhotoPostStatus::Staging,
                     'caption' => $caption,
+                    'location' => $location,
                     'raw_key' => $rawKey,
                     'output_key' => $outputKey,
                     'input_bytes' => $bytes,
@@ -118,6 +125,7 @@ class ManagePhotoPosts
                 'attempt_token' => $attemptToken,
                 'status' => PhotoPostStatus::Staging,
                 'caption' => $caption,
+                'location' => $location,
                 'raw_key' => $rawKey,
                 'output_key' => $outputKey,
                 'input_bytes' => $bytes,
@@ -226,6 +234,7 @@ class ManagePhotoPosts
             $current->update([
                 'status' => PhotoPostStatus::Deleted,
                 'caption' => null,
+                'location' => null,
                 'request_fingerprint' => str_repeat('0', 64),
                 'deleted_at' => now(),
                 'cleanup_due_at' => now(),
@@ -301,22 +310,114 @@ class ManagePhotoPosts
 
     private function deleteArtifacts(PhotoPost $post): bool
     {
-        $disk = Storage::disk('photo_posts');
         $clean = true;
-        foreach ([$post->raw_key, $post->output_key] as $key) {
-            try {
-                if ($disk->exists($key) && ! $disk->delete($key)) {
-                    $clean = false;
-                }
-                if ($disk->exists($key)) {
-                    $clean = false;
-                }
-            } catch (\Throwable) {
+        foreach (['raw_key', 'output_key'] as $field) {
+            if (! $this->deleteArtifact($post, $field, $post->{$field})) {
                 $clean = false;
             }
         }
 
         return $clean;
+    }
+
+    public function deleteRawInput(PhotoPost $post): bool
+    {
+        return $this->deleteArtifact($post, 'raw_key', $post->raw_key);
+    }
+
+    private function deleteArtifact(PhotoPost $post, string $field, string $key): bool
+    {
+        if (! $this->isKnownArtifactKey($post, $field, $key)
+            || config('filesystems.disks.photo_posts.driver') !== 'local') {
+            return false;
+        }
+
+        try {
+            $disk = Storage::disk('photo_posts');
+            $present = $this->artifactPresent($disk, $key);
+            if ($present === null) {
+                return false;
+            }
+            if ($present) {
+                try {
+                    $disk->delete($key);
+                } catch (\Throwable) {
+                    // The final filesystem proof decides whether the charge can be released.
+                }
+            }
+
+            return $this->artifactPresent($disk, $key) === false;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function isKnownArtifactKey(PhotoPost $post, string $field, string $key): bool
+    {
+        if (! Str::isUuid($post->attempt_token)) {
+            return false;
+        }
+
+        $token = $post->attempt_token;
+        $knownKeys = match ($field) {
+            'raw_key' => ["{$token}/original", "photo-posts/{$token}/raw"],
+            'output_key' => ["{$token}/processed.webp", "photo-posts/{$token}/processed.webp"],
+            default => [],
+        };
+
+        return in_array($key, $knownKeys, true);
+    }
+
+    private function artifactPresent(mixed $disk, string $key): ?bool
+    {
+        $root = $disk->path('');
+        if (! is_string($root)) {
+            return null;
+        }
+        $root = rtrim($root, DIRECTORY_SEPARATOR);
+        if ($root === '') {
+            $root = DIRECTORY_SEPARATOR;
+        }
+        if (is_link($root) || ! is_dir($root) || ! is_readable($root) || ! is_executable($root)) {
+            return null;
+        }
+        $root = realpath($root);
+        if (! is_string($root)) {
+            return null;
+        }
+
+        $parent = $root;
+        $parts = explode('/', $key);
+        foreach ($parts as $index => $part) {
+            if (is_link($parent) || ! is_dir($parent) || ! is_readable($parent) || ! is_executable($parent)
+                || realpath($parent) !== $parent) {
+                return null;
+            }
+            $entries = @scandir($parent);
+            if (! is_array($entries)) {
+                return null;
+            }
+            if (! in_array($part, $entries, true)) {
+                return false;
+            }
+
+            $path = $parent.DIRECTORY_SEPARATOR.$part;
+            $stat = @lstat($path);
+            $resolved = realpath($path);
+            if (! is_array($stat) || is_link($path) || ! is_string($resolved) || $resolved !== $path) {
+                return null;
+            }
+            $type = $stat['mode'] & 0170000;
+            if ($index === array_key_last($parts)) {
+                return $type === 0100000 ? true : null;
+            }
+            if ($type !== 0040000) {
+                return null;
+            }
+            $parent = $path;
+        }
+
+        return null;
     }
 
     private function reportOverdueDeletion(PhotoPost $post): void

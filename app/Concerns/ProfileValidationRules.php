@@ -2,8 +2,9 @@
 
 namespace App\Concerns;
 
-use App\Rules\UniqueContactEmail;
+use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Validation\Rule;
 
 trait ProfileValidationRules
 {
@@ -42,7 +43,9 @@ trait ProfileValidationRules
             'string',
             'email',
             'max:255',
-            new UniqueContactEmail($userId),
+            $userId === null
+                ? Rule::unique(User::class)
+                : Rule::unique(User::class)->ignore($userId),
         ];
     }
 }

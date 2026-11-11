@@ -97,7 +97,7 @@ it('keeps existing history readable after unfollow while refusing new messages',
     $this->actingAs($bob)->get(route('messages.show', $conversation))->assertInertia(fn (Assert $page) => $page
         ->where('thread.messages.0.body', 'Saved history')->where('thread.canSend', false));
     $this->post(route('messages.send', $conversation), ['body' => 'Blocked after revocation', 'nonce' => Str::uuid()->toString()])
-        ->assertSessionHasErrors(['body' => 'Messages can only be sent while both members follow each other.']);
+        ->assertSessionHasErrors(['body' => 'New messages are unavailable until both members follow each other or a message request is accepted.']);
     $this->assertDatabaseCount('conversation_messages', 1);
 });
 

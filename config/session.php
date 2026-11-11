@@ -20,12 +20,6 @@ return [
 
     'driver' => env('SESSION_DRIVER', 'database'),
 
-    'block' => true,
-
-    'block_lock_seconds' => 45,
-
-    'block_wait_seconds' => 10,
-
     /*
     |--------------------------------------------------------------------------
     | Session Lifetime

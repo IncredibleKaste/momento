@@ -12,6 +12,7 @@ it('composes ready photo details with only the current member heart and save sta
     $post = PhotoPost::factory()->for($follow->followed)->create([
         'status' => PhotoPostStatus::Ready,
         'caption' => 'A member photo',
+        'location' => 'Near the river',
     ]);
 
     $this->actingAs($follow->follower)->postJson(route('photo-likes.store', $post), [
@@ -30,9 +31,11 @@ it('composes ready photo details with only the current member heart and save sta
             ->component('photo-posts/show')
             ->where('photoPost.id', $post->id)
             ->where('photoPost.mediaUrl', route('photo-posts.media', $post))
+            ->where('photoPost.location', 'Near the river')
             ->where('detail', [
                 'author' => ['id' => $follow->followed->id, 'name' => $follow->followed->name],
                 'createdAt' => $post->created_at->toISOString(),
+                'location' => 'Near the river',
                 'likeState' => ['liked' => true, 'revision' => 1],
                 'saveState' => ['saved' => true, 'revision' => 1],
             ])

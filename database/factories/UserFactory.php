@@ -29,12 +29,18 @@ class UserFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'product_news_opt_in' => false,
+            'message_requests_enabled' => false,
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
             'two_factor_secret' => null,
             'two_factor_recovery_codes' => null,
             'two_factor_confirmed_at' => null,
         ];
+    }
+
+    public function passwordless(): static
+    {
+        return $this->state(fn (array $attributes) => ['password' => null]);
     }
 
     /**

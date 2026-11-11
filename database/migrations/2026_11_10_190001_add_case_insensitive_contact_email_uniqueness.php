@@ -5,9 +5,6 @@ use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         if (DB::selectOne('SELECT 1 FROM users GROUP BY lower(email) HAVING COUNT(*) > 1 LIMIT 1') !== null) {
@@ -17,11 +14,12 @@ return new class extends Migration
         DB::statement('CREATE UNIQUE INDEX users_email_case_insensitive_unique ON users (lower(email))');
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
+        if (DB::table('users')->whereNull('password')->exists()) {
+            throw new RuntimeException('Cannot reverse OIDC account support while passwordless users remain.');
+        }
+
         DB::statement('DROP INDEX users_email_case_insensitive_unique');
     }
 };

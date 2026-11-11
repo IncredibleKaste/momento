@@ -7,7 +7,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class MicrosoftContactVerification extends Notification implements ShouldQueue
+class OidcContactVerification extends Notification implements ShouldQueue
 {
     use Queueable;
 
@@ -27,8 +27,8 @@ class MicrosoftContactVerification extends Notification implements ShouldQueue
     {
         return (new MailMessage)
             ->subject('Verify your Momento contact email')
-            ->line('Confirm this address to finish creating your Microsoft sign-in account.')
+            ->line('Confirm this address to finish creating your sign-in account.')
             ->action('Confirm contact email', $this->url)
-            ->line('The link expires with your Microsoft sign-in session and must be opened in the same browser.');
+            ->line('Open the link in the same browser session that started sign-in.');
     }
 }

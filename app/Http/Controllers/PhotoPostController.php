@@ -37,6 +37,7 @@ class PhotoPostController
         $validated = $request->validate([
             'photo' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,heic,heif'],
             'caption' => ['nullable', 'string', 'max:1000', 'not_regex:/\x00/'],
+            'location' => ['nullable', 'string', 'max:'.config('photo_processing.max_location_characters'), 'not_regex:/\x00/'],
             'idempotency_key' => ['required', 'uuid'],
         ]);
         $photo = $validated['photo'];
@@ -44,7 +45,10 @@ class PhotoPostController
             throw ValidationException::withMessages(['photo' => 'Choose a photo no larger than 20 MB.']);
         }
         try {
-            $post = $posts->submit($request->user(), $photo, $validated['caption'] ?? null, $validated['idempotency_key']);
+            $location = is_string($validated['location'] ?? null)
+                ? trim($validated['location'])
+                : null;
+            $post = $posts->submit($request->user(), $photo, $validated['caption'] ?? null, $validated['idempotency_key'], $location === '' ? null : $location);
         } catch (PhotoDecoderException $exception) {
             throw ValidationException::withMessages(['photo' => $exception->failure->message()]);
         }
@@ -82,6 +86,7 @@ class PhotoPostController
             $detail = [
                 'author' => ['id' => $photoPost->user->id, 'name' => $photoPost->user->name],
                 'createdAt' => $photoPost->created_at?->toISOString(),
+                'location' => $photoPost->location,
                 'likeState' => $likeState,
                 'saveState' => ['saved' => (bool) ($saved->is_saved ?? false), 'revision' => (int) ($saved->revision ?? 0)],
             ];
@@ -92,6 +97,7 @@ class PhotoPostController
                 'id' => $photoPost->id,
                 'status' => $photoPost->status->value,
                 'caption' => $photoPost->caption,
+                'location' => $photoPost->location,
                 'mediaUrl' => $isReady ? route('photo-posts.media', $photoPost) : null,
                 'canDelete' => $canDelete,
                 'canCancel' => $canCancel,
@@ -157,13 +163,14 @@ class PhotoPostController
         return to_route('dashboard');
     }
 
-    /** @return array{maxInputBytes: int, maxPixels: int, maxCaptionCharacters: int, accept: list<string>} */
+    /** @return array{maxInputBytes: int, maxPixels: int, maxCaptionCharacters: int, maxLocationCharacters: int, accept: list<string>} */
     private function limits(): array
     {
         return [
             'maxInputBytes' => config('photo_processing.max_input_bytes'),
             'maxPixels' => config('photo_processing.max_input_pixels'),
             'maxCaptionCharacters' => config('photo_processing.max_caption_characters'),
+            'maxLocationCharacters' => config('photo_processing.max_location_characters'),
             'accept' => ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'],
         ];
     }

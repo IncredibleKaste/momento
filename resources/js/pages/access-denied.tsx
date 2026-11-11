@@ -10,7 +10,7 @@ export default function AccessDenied() {
             <h1 className="font-serif text-3xl">Access unavailable</h1>
             <p className="text-muted-foreground">
                 Your access is no longer available. Please sign in again or
-                contact your organization administrator.
+                contact support.
             </p>
             <Button asChild>
                 <Link href={login()}>Sign in</Link>

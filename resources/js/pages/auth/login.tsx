@@ -1,4 +1,4 @@
-import { Form, Head, Link, usePage } from '@inertiajs/react';
+import { Form, Head, usePage } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
@@ -9,36 +9,45 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { register } from '@/routes';
 import { store } from '@/routes/login';
-import { index as microsoft } from '@/routes/microsoft';
+import { start as oidcStart } from '@/routes/oidc';
 import { request } from '@/routes/password';
+import { index as microsoftIndex } from '@/routes/microsoft';
 import PasskeyVerify from '@/components/passkey-verify';
+
+type PageProps = {
+    errors?: {
+        oidc?: string | string[];
+    };
+};
 
 type Props = {
     status?: string;
     canResetPassword: boolean;
-    canMicrosoftLogin: boolean;
+    canGoogleLogin?: boolean;
+    canSwitchLogin?: boolean;
+    canMicrosoftLogin?: boolean;
 };
 
 export default function Login({
     status,
     canResetPassword,
-    canMicrosoftLogin,
+    canGoogleLogin = false,
+    canSwitchLogin = false,
+    canMicrosoftLogin = false,
 }: Props) {
-    const { errors } = usePage().props;
+    const oidcErrors = usePage<PageProps>().props.errors?.oidc;
+    const oidcError = Array.isArray(oidcErrors) ? oidcErrors[0] : oidcErrors;
+
     return (
         <>
-            <Head title="Log in" />
+            <Head title="Welcome back" />
 
-            {errors.microsoft && (
-                <p role="alert" className="text-sm text-destructive">
-                    {errors.microsoft}
+            {oidcError && (
+                <p className="text-sm text-destructive" role="alert">
+                    {oidcError}
                 </p>
             )}
-            {canMicrosoftLogin && (
-                <Button asChild variant="outline" className="w-full">
-                    <Link href={microsoft()}>Continue with Microsoft</Link>
-                </Button>
-            )}
+
             <PasskeyVerify />
 
             <Form
@@ -50,7 +59,7 @@ export default function Login({
                     <>
                         <div className="grid gap-5">
                             <div className="grid gap-2">
-                                <Label htmlFor="email">Email address</Label>
+                                <Label htmlFor="email">Email</Label>
                                 <Input
                                     id="email"
                                     type="email"
@@ -58,7 +67,7 @@ export default function Login({
                                     required
                                     autoFocus
                                     autoComplete="email"
-                                    placeholder="email@example.com"
+                                    placeholder="you@example.com"
                                     aria-invalid={Boolean(errors.email)}
                                     aria-describedby={
                                         errors.email ? 'email-error' : undefined
@@ -78,7 +87,6 @@ export default function Login({
                                     name="password"
                                     required
                                     autoComplete="current-password"
-                                    placeholder="Password"
                                     aria-invalid={Boolean(errors.password)}
                                     aria-describedby={
                                         errors.password
@@ -106,7 +114,7 @@ export default function Login({
                                         href={request()}
                                         className="text-sm"
                                     >
-                                        Forgot your password?
+                                        Forgot password?
                                     </TextLink>
                                 )}
                             </div>
@@ -118,13 +126,55 @@ export default function Login({
                                 data-test="login-button"
                             >
                                 {processing && <Spinner />}
-                                Log in
+                                Sign in
                             </Button>
+                            {(canGoogleLogin ||
+                                canSwitchLogin ||
+                                canMicrosoftLogin) && (
+                                <div className="border-t border-border pt-4 text-center text-xs text-muted-foreground">
+                                    or sign in with a provider
+                                </div>
+                            )}
+                            {canGoogleLogin && (
+                                <Button
+                                    asChild
+                                    variant="outline"
+                                    className="w-full"
+                                >
+                                    <a href={oidcStart.url('google')}>
+                                        Continue with Google
+                                    </a>
+                                </Button>
+                            )}
+                            {canSwitchLogin && (
+                                <Button
+                                    asChild
+                                    variant="outline"
+                                    className="w-full"
+                                >
+                                    <a href={oidcStart.url('switch')}>
+                                        Continue with SWITCH edu-ID
+                                    </a>
+                                </Button>
+                            )}
+                            {canMicrosoftLogin && (
+                                <Button
+                                    asChild
+                                    variant="outline"
+                                    className="w-full"
+                                >
+                                    <a href={microsoftIndex.url()}>
+                                        Continue with Microsoft
+                                    </a>
+                                </Button>
+                            )}
                         </div>
 
                         <div className="text-center text-sm text-muted-foreground">
-                            Don't have an account?{' '}
-                            <TextLink href={register()}>Sign up</TextLink>
+                            New here?{' '}
+                            <TextLink href={register()}>
+                                Create an account
+                            </TextLink>
                         </div>
                     </>
                 )}
@@ -143,6 +193,6 @@ export default function Login({
 }
 
 Login.layout = {
-    title: 'Log in to your account',
-    description: 'Enter your email and password below to log in',
+    title: 'Welcome back.',
+    description: 'A little of your everyday, all in one place.',
 };
