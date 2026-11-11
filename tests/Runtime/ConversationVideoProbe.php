@@ -31,7 +31,6 @@ try {
     ensure(in_array('H.26[45] User Data Unregistered SEI message', frameSideDataTypes($ordinary), true), 'Ordinary H.264 fixture lacks its benign x264 encoder-info SEI.');
     $ordinaryOutput = $temporaryDirectory.'/ordinary-output.mp4';
     decodeFixture($ordinary, $ordinaryOutput);
-    assertShortAudioVideoTimingPreserved(syntheticAudioFacts($ordinary), syntheticAudioFacts($ordinaryOutput));
 
     $fastStart = $temporaryDirectory.'/faststart.mp4';
     createFixture($fastStart, 3, true, false);
@@ -68,6 +67,7 @@ try {
     $exactLimit = $temporaryDirectory.'/exact-60.mp4';
     createFixture($exactLimit, 60, true, true, framesPerSecond: 1);
     decodeFixture($exactLimit, $temporaryDirectory.'/exact-60-output.mp4', includeExactDurationFacts: true);
+    assertShortAudioVideoTimingPreserved(syntheticAudioFacts($ordinary), syntheticAudioFacts($ordinaryOutput));
 
     $tooLong = $temporaryDirectory.'/too-long.mp4';
     createFixture($tooLong, 61, true, false, framesPerSecond: 1);
