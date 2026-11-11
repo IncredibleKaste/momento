@@ -37,7 +37,7 @@ export default function Login({
 
     return (
         <>
-            <Head title="Log in" />
+            <Head title="Welcome back" />
 
             {oidcError && (
                 <p className="text-sm text-destructive" role="alert">
@@ -83,7 +83,7 @@ export default function Login({
                                 </div>
                             )}
                             <div className="grid gap-2">
-                                <Label htmlFor="email">Email address</Label>
+                                <Label htmlFor="email">Email</Label>
                                 <Input
                                     id="email"
                                     type="email"
@@ -91,7 +91,7 @@ export default function Login({
                                     required
                                     autoFocus
                                     autoComplete="email"
-                                    placeholder="email@example.com"
+                                    placeholder="you@example.com"
                                     aria-invalid={Boolean(errors.email)}
                                     aria-describedby={
                                         errors.email ? 'email-error' : undefined
@@ -111,7 +111,6 @@ export default function Login({
                                     name="password"
                                     required
                                     autoComplete="current-password"
-                                    placeholder="Password"
                                     aria-invalid={Boolean(errors.password)}
                                     aria-describedby={
                                         errors.password
@@ -139,7 +138,7 @@ export default function Login({
                                         href={request()}
                                         className="text-sm"
                                     >
-                                        Forgot your password?
+                                        Forgot password?
                                     </TextLink>
                                 )}
                             </div>
@@ -151,13 +150,15 @@ export default function Login({
                                 data-test="login-button"
                             >
                                 {processing && <Spinner />}
-                                Log in
+                                Sign in
                             </Button>
                         </div>
 
                         <div className="text-center text-sm text-muted-foreground">
-                            Don't have an account?{' '}
-                            <TextLink href={register()}>Sign up</TextLink>
+                            New here?{' '}
+                            <TextLink href={register()}>
+                                Create an account
+                            </TextLink>
                         </div>
                     </>
                 )}
@@ -176,6 +177,6 @@ export default function Login({
 }
 
 Login.layout = {
-    title: 'Log in to your account',
-    description: 'Enter your email and password below to log in',
+    title: 'Welcome back.',
+    description: 'A little of your everyday, all in one place.',
 };
