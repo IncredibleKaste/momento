@@ -361,12 +361,21 @@ function assertRejected(string $input, string $output, ?string $expectedPhase = 
 {
     $process = new Process([VIDEO_DECODER, $input, $output], timeout: 140);
     $process->run();
-    if ($process->isSuccessful() || file_exists($output) || is_link($output)) {
-        throw new RuntimeException('Invalid or over-limit input was accepted or left a partial output behind.');
-    }
     $phase = decoderFailurePhase($process->getErrorOutput());
-    if ($phase === null || ($expectedPhase !== null && $phase !== $expectedPhase)) {
-        throw new RuntimeException('The video decoder returned an invalid failure diagnostic.');
+    $diagnostic = [
+        'fixture' => basename($input),
+        'exitCode' => $process->getExitCode(),
+        'successful' => $process->isSuccessful(),
+        'outputExists' => file_exists($output),
+        'outputIsLink' => is_link($output),
+    ];
+    if ($phase !== null) {
+        $diagnostic['phase'] = $phase;
+    }
+
+    if ($process->isSuccessful() || $diagnostic['outputExists'] || $diagnostic['outputIsLink']
+        || $phase === null || ($expectedPhase !== null && $phase !== $expectedPhase)) {
+        throw new RuntimeException('Invalid synthetic rejection: '.json_encode($diagnostic, JSON_THROW_ON_ERROR));
     }
 }
 

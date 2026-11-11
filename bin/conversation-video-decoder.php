@@ -53,8 +53,81 @@ function validInput(string $path): bool
 
     $resolved = realpath($path);
     $bytes = @filesize($path);
+    if ($resolved !== $path || ! is_int($bytes) || $bytes <= 0 || $bytes > MAX_INPUT_BYTES) {
+        return false;
+    }
 
-    return $resolved === $path && is_int($bytes) && $bytes > 0 && $bytes <= MAX_INPUT_BYTES;
+    $handle = @fopen($path, 'rb');
+    if (! is_resource($handle)) {
+        return false;
+    }
+
+    try {
+        $opened = @fstat($handle);
+        $currentPath = @lstat($path);
+        if (! is_array($opened) || ! is_array($currentPath)
+            || (($opened['mode'] ?? 0) & 0170000) !== 0100000
+            || (($currentPath['mode'] ?? 0) & 0170000) !== 0100000
+            || $opened['dev'] !== $currentPath['dev'] || $opened['ino'] !== $currentPath['ino']
+            || $opened['size'] !== $bytes || $currentPath['size'] !== $bytes) {
+            return false;
+        }
+
+        $offset = 0;
+        while ($offset < $bytes) {
+            $remaining = $bytes - $offset;
+            if ($remaining < 8) {
+                return false;
+            }
+
+            $header = fread($handle, 8);
+            if (! is_string($header) || strlen($header) !== 8) {
+                return false;
+            }
+
+            $boxSize = unpack('Nsize', substr($header, 0, 4))['size'];
+            if ($boxSize === 1) {
+                if ($remaining < 16) {
+                    return false;
+                }
+
+                $extendedSize = fread($handle, 8);
+                if (! is_string($extendedSize) || strlen($extendedSize) !== 8) {
+                    return false;
+                }
+                $words = unpack('Nhigh/Nlow', $extendedSize);
+                if ($words['high'] !== 0 || $words['low'] < 16) {
+                    return false;
+                }
+                $boxSize = $words['low'];
+            } elseif ($boxSize === 0) {
+                $boxSize = $remaining;
+            } elseif ($boxSize < 8) {
+                return false;
+            }
+
+            if ($boxSize > $remaining) {
+                return false;
+            }
+
+            $offset += $boxSize;
+            if (fseek($handle, $offset) !== 0) {
+                return false;
+            }
+        }
+
+        $closed = @fstat($handle);
+        $currentPath = @lstat($path);
+
+        return $offset === $bytes && is_array($closed) && is_array($currentPath)
+            && (($closed['mode'] ?? 0) & 0170000) === 0100000
+            && (($currentPath['mode'] ?? 0) & 0170000) === 0100000
+            && $closed['dev'] === $opened['dev'] && $closed['ino'] === $opened['ino']
+            && $currentPath['dev'] === $opened['dev'] && $currentPath['ino'] === $opened['ino']
+            && $closed['size'] === $bytes && $currentPath['size'] === $bytes;
+    } finally {
+        fclose($handle);
+    }
 }
 
 function validOutput(string $path): bool
