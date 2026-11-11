@@ -657,8 +657,9 @@ function rewriteDurationBoxes(string $bytes, int $start, bool &$found, int $seco
             $found = true;
         } elseif (in_array($type, $containers, true)) {
             $rewritten = rewriteDurationBoxes($box, 8, $found, $seconds);
-            $box = pack('N', strlen($rewritten) + 8).$type.substr($rewritten, 8);
+            $box = pack('N', strlen($rewritten)).$type.substr($rewritten, 8);
         }
+        ensure(unpack('Nsize', substr($box, 0, 4))['size'] === strlen($box), 'Duration fixture rewrite produced an inconsistent MP4 box size.');
         $output .= $box;
         $offset += $size;
     }
@@ -691,8 +692,9 @@ function rewriteBoxes(string $bytes, int $start, bool &$found, string $uri): str
             $found = true;
         } elseif (in_array($type, $containers, true)) {
             $rewritten = rewriteBoxes($box, 8, $found, $uri);
-            $box = pack('N', strlen($rewritten) + 8).$type.substr($rewritten, 8);
+            $box = pack('N', strlen($rewritten)).$type.substr($rewritten, 8);
         }
+        ensure(unpack('Nsize', substr($box, 0, 4))['size'] === strlen($box), 'Dref fixture rewrite produced an inconsistent MP4 box size.');
         $output .= $box;
         $offset += $size;
     }
