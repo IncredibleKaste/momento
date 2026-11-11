@@ -17,9 +17,6 @@ const MAX_DURATION_SECONDS = 60.0;
 const MAX_PROBE_OUTPUT_BYTES = 65_536;
 const MAX_FRAME_SCAN_OUTPUT_BYTES = 2_097_152;
 const OUTPUT_AUDIO_SAMPLE_RATE = 48_000;
-const OUTPUT_AAC_FRAME_SAMPLES = 1_024;
-const MAX_OUTPUT_AAC_FRAMES = 2_812;
-const MAX_OUTPUT_AUDIO_SAMPLES = MAX_OUTPUT_AAC_FRAMES * OUTPUT_AAC_FRAME_SAMPLES;
 const MAX_LONG_EDGE = 1_440;
 const MAX_INPUT_LONG_EDGE = 4_096;
 const MAX_INPUT_PIXELS = 12_000_000;
@@ -137,6 +134,7 @@ function framesHaveInvalidData(string $path, ?int $audioSampleRate): bool
     $firstAudioStart = null;
     $maxAudioEnd = null;
     $previousAudioTimestamp = null;
+    $lastAudioFrame = null;
 
     foreach ($frames as $frame) {
         if (! is_array($frame)) {
@@ -199,10 +197,12 @@ function framesHaveInvalidData(string $path, ?int $audioSampleRate): bool
         $frameEnd = $timestamp + $frameDuration - ($discardPadding / $audioSampleRate);
         $effectiveSamples = $frameSamples - $skipSamples - $discardPadding;
         $audioSampleCount += $effectiveSamples;
-        if ($audioSampleCount > ($audioSampleRate * MAX_DURATION_SECONDS)) {
-            return true;
-        }
-
+        $lastAudioFrame = [
+            'samples' => $frameSamples,
+            'skipSamples' => $skipSamples,
+            'discardPadding' => $discardPadding,
+            'durationSeconds' => $frameDuration,
+        ];
         $previousAudioTimestamp = $timestamp;
         if ($effectiveSamples === 0) {
             continue;
@@ -220,9 +220,21 @@ function framesHaveInvalidData(string $path, ?int $audioSampleRate): bool
         return false;
     }
 
+    if ($lastAudioFrame !== null
+        && $lastAudioFrame['skipSamples'] === 0
+        && $lastAudioFrame['discardPadding'] === 0
+        && is_finite($lastAudioFrame['durationSeconds'])
+        && $lastAudioFrame['durationSeconds'] > 0) {
+        $presentedSamples = (int) round($lastAudioFrame['durationSeconds'] * $audioSampleRate);
+        if ($presentedSamples >= 1 && $presentedSamples < $lastAudioFrame['samples']) {
+            $audioSampleCount -= $lastAudioFrame['samples'] - $presentedSamples;
+        }
+    }
+
     return $effectiveAudioFrameCount === 0
         || ! is_float($firstAudioStart)
         || ! is_float($maxAudioEnd)
+        || $audioSampleCount > ($audioSampleRate * MAX_DURATION_SECONDS)
         || $maxAudioEnd > MAX_DURATION_SECONDS
         || ($maxAudioEnd - $firstAudioStart) > MAX_DURATION_SECONDS;
 }
@@ -629,7 +641,7 @@ try {
     $filter = "scale=w='min(1440,iw)':h='min(1440,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1,fps='min(30,source_fps)',format=yuv420p";
     $audioFilter = $dimensions['audioSampleRate'] === null
         ? []
-        : ['-af', 'aresample='.OUTPUT_AUDIO_SAMPLE_RATE.',atrim=end_sample='.MAX_OUTPUT_AUDIO_SAMPLES];
+        : ['-af', 'aresample='.OUTPUT_AUDIO_SAMPLE_RATE.',atrim=end='.MAX_DURATION_SECONDS];
     $failurePhase = 'transcode';
     $transcode = runNative([
         FFMPEG,

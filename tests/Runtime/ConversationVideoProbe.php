@@ -70,6 +70,9 @@ try {
     $exactLimit = $temporaryDirectory.'/exact-60.mp4';
     createFixture($exactLimit, 60, true, true, framesPerSecond: 1);
     decodeFixture($exactLimit, $temporaryDirectory.'/exact-60-output.mp4', includeExactDurationFacts: true);
+    $exactOffsetLimit = $temporaryDirectory.'/exact-60-offset.mp4';
+    createFixture($exactOffsetLimit, 60, true, true, framesPerSecond: 1, audioDuration: 59.875, audioOffsetSeconds: 0.125);
+    decodeFixture($exactOffsetLimit, $temporaryDirectory.'/exact-60-offset-output.mp4', includeExactDurationFacts: true);
     $ordinaryInputAudioFacts = syntheticAudioFacts($ordinary);
     $ordinaryOutputAudioFacts = syntheticAudioFacts($ordinaryOutput);
     assertShortAudioVideoTimingPreserved(
@@ -100,13 +103,13 @@ try {
             && $forgedAudioFacts['formatDurationSeconds'] <= 60
             && $forgedAudioFacts['audioDurationSeconds'] !== null
             && $forgedAudioFacts['audioDurationSeconds'] <= 60,
-        'Forged long-audio metadata did not hide the actual duration before decoder rejection.',
+        'Forged long-audio metadata did not hide the actual duration before decoder rejection: '.json_encode($forgedAudioFacts, JSON_THROW_ON_ERROR),
     );
     ensure(
         is_int($forgedAudioFacts['sampleRate'])
             && is_int($forgedAudioFacts['effectiveSamples'])
             && $forgedAudioFacts['effectiveSamples'] > ($forgedAudioFacts['sampleRate'] * 60),
-        'The forged audio fixture does not contain more than 60 seconds of decoded audio samples.',
+        'The forged audio fixture does not contain more than 60 seconds of decoded audio samples: '.json_encode($forgedAudioFacts, JSON_THROW_ON_ERROR),
     );
     assertRejected($forgedLongAudio, $temporaryDirectory.'/forged-long-audio-output.mp4', expectedPhase: 'frame_scan');
 
@@ -184,7 +187,7 @@ function createFixture(
     int $width = 320,
     int $height = 240,
     bool $explicitSdr = false,
-    ?int $audioDuration = null,
+    ?float $audioDuration = null,
     float $audioOffsetSeconds = 0.0,
 ): void {
     $command = [
