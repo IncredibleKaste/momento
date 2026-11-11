@@ -723,15 +723,18 @@
 }
 
 .messages-page .chat-input-shell {
-    position: relative;
+    display: flex;
+    align-items: flex-end;
     width: 100%;
     border: 1px solid var(--border);
     border-radius: 24px;
     background: var(--card);
 }
 
-.messages-page .chat-input-shell:focus-within {
+.messages-page .chat-input-shell:has(> textarea:focus-visible) {
     border-color: var(--ring);
+    outline: 2px solid var(--ring);
+    outline-offset: -1px;
 }
 
 .messages-page :is(.chat-conversations, .chat-log, .chat-thread) {
