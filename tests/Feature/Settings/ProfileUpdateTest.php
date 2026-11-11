@@ -1,8 +1,32 @@
 <?php
 
 use App\Models\Follow;
+use App\Models\OidcIdentity;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
+
+const PROFILE_MICROSOFT_TENANT = '11111111-1111-4111-8111-111111111111';
+
+beforeEach(function () {
+    config(['services.microsoft' => [
+        'client_id' => '22222222-2222-4222-8222-222222222222',
+        'client_secret' => 'fictional-test-secret',
+        'redirect_uri' => 'http://localhost/auth/microsoft/callback',
+        'tenants' => ['example' => ['id' => PROFILE_MICROSOFT_TENANT, 'name' => 'Example organization']],
+    ]]);
+});
+
+function createMicrosoftProfileIdentity(User $user): OidcIdentity
+{
+    return OidcIdentity::factory()->create([
+        'user_id' => $user->id,
+        'provider' => 'microsoft',
+        'issuer' => 'https://login.microsoftonline.com/'.PROFILE_MICROSOFT_TENANT.'/v2.0',
+        'subject' => 'profile-provider-subject-'.$user->id,
+        'stable_subject' => fake()->uuid(),
+    ]);
+}
 
 test('profile page is displayed', function () {
     $user = User::factory()->create();
@@ -12,6 +36,37 @@ test('profile page is displayed', function () {
         ->get(route('profile.edit'));
 
     $response->assertOk();
+});
+
+test('provider-only profiles do not expose email changes and still allow public-name updates', function () {
+    $user = User::factory()->create(['password' => null, 'email' => 'provider@example.test']);
+    createMicrosoftProfileIdentity($user);
+
+    $this->actingAs($user)->get(route('profile.edit'))
+        ->assertInertia(fn (Assert $page) => $page->component('settings/profile')->missing('canChangeEmail'));
+
+    $this->patch(route('profile.update'), ['name' => 'Updated name'])->assertSessionHasNoErrors();
+    expect($user->fresh()->name)->toBe('Updated name')->and($user->fresh()->email)->toBe('provider@example.test');
+    $this->patch(route('profile.update'), ['name' => 'Should not save', 'email' => 'victim@example.test'])
+        ->assertSessionHasErrors('email');
+    expect($user->fresh()->name)->toBe('Updated name')->and($user->fresh()->email)->toBe('provider@example.test');
+});
+
+test('provider-only name updates preserve historical email casing and verification time', function () {
+    $user = User::factory()->create(['password' => null]);
+    createMicrosoftProfileIdentity($user);
+    $verifiedAt = now()->subDay()->startOfSecond();
+    DB::table('users')->where('id', $user->id)->update([
+        'email' => 'Legacy.Case@example.test',
+        'email_verified_at' => $verifiedAt,
+    ]);
+
+    $this->actingAs($user)->patch(route('profile.update'), ['name' => 'Updated legacy name'])
+        ->assertSessionHasNoErrors();
+
+    expect($user->fresh()->name)->toBe('Updated legacy name')
+        ->and($user->fresh()->email)->toBe('Legacy.Case@example.test')
+        ->and($user->fresh()->email_verified_at->toDateTimeString())->toBe($verifiedAt->toDateTimeString());
 });
 
 test('profile name can be updated without changing the account email', function () {

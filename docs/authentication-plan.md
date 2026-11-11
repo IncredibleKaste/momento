@@ -2,12 +2,13 @@
 
 Momento supports verified email/password accounts with optional authenticator-app codes, recovery codes and passkeys.
 
-Google and institutional SWITCH sign-in use OpenID Connect when configured. Each requires separate verification of a contact email before account creation. Provider email addresses never link or merge accounts. Microsoft approved-tenant sign-in remains a separate pending integration.
+Google, approved-organization Microsoft and institutional SWITCH sign-in use OpenID Connect when configured. Each requires separate verification of a contact email before account creation. Provider email addresses never link or merge accounts.
 
 ## External identities
 
 - Accounts use the validated provider, issuer and case-sensitive subject as their external identity.
 - Authorization requests use state, nonce and S256 PKCE. Server-side verification checks signatures, issuer, audience, expiry and transaction binding.
+- Microsoft also binds the approved tenant and object identifier to the signed subject. The current organization allowlist applies during onboarding and to established sessions.
 - SWITCH also requires a signed institutional-domain claim that matches the current institution allowlist. Personal edu-ID identities do not meet this policy.
 - Provider-only accounts cannot add local passwords, recover through local password reset or enroll local factors to bypass provider sign-in.
 - Missing configuration disables the provider. Configuration availability does not establish provider readiness.

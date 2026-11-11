@@ -16,6 +16,7 @@ void createInertiaApp({
         switch (true) {
             case name === 'welcome':
             case name === 'not-found':
+            case name === 'access-denied':
             case name === 'email-updates/unsubscribe':
             case name === 'email-updates/unsubscribed':
                 return null;

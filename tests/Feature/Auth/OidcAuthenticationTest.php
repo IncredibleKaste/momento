@@ -347,6 +347,7 @@ it('binds SWITCH tokens to the selected relying party and transaction', function
     'wrong relying party audience' => [['aud' => 'another-client']],
     'additional relying party audience' => [['aud' => [OIDC_TEST_CLIENT, 'another-client'], 'azp' => OIDC_TEST_CLIENT]],
     'wrong authorized party' => [['azp' => 'another-client']],
+    'null authorized party' => [['azp' => null]],
     'wrong issuer preset' => [['iss' => 'https://login.eduid.ch/']],
     'wrong nonce' => [['nonce' => 'another-transaction']],
     'expired identity token' => [['exp' => 1]],
@@ -411,7 +412,7 @@ it('blocks local password recovery and security management for passwordless acco
         'password_confirmation' => 'Sample-passphrase-48!',
     ])->assertSessionHasErrors('email');
     $this->actingAs($user)->put(route('user-password.update'), ['password' => 'Sample-passphrase-48!'])->assertForbidden();
-    $this->get(route('security.edit'))->assertRedirectToRoute('password.confirm');
+    $this->get(route('security.edit'))->assertForbidden();
     $this->post('/user/two-factor-authentication')->assertForbidden();
     $this->get('/user/passkeys/options')->assertForbidden();
     expect($user->fresh()->password)->toBeNull();

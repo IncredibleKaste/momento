@@ -325,6 +325,16 @@ test('passkey option requests are rate limited within a session', function () {
     $this->getJson(route('passkey.login-options'))->assertTooManyRequests();
 });
 
+test('changing a submitted credential id cannot bypass the passkey session limit', function () {
+    $this->withSession([])->withCredentials()->withCookie(config('session.cookie'), session()->getId());
+
+    foreach (range(1, 10) as $attempt) {
+        $this->getJson(route('passkey.login-options', ['credential' => ['id' => 'rotating-'.$attempt]]))->assertOk();
+    }
+
+    $this->getJson(route('passkey.login-options', ['credential' => ['id' => 'rotating-11']]))->assertTooManyRequests();
+});
+
 test('rotating guest sessions cannot bypass the passkey per IP limit', function () {
     foreach (range(1, 60) as $attempt) {
         $this->getJson(route('passkey.login-options'))->assertOk();

@@ -53,15 +53,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 Route::middleware(['guest', 'throttle:10,1'])->group(function (): void {
     Route::get('auth/oidc/{provider}/start', [OidcAuthenticationController::class, 'start'])
-        ->where('provider', 'google|switch')->name('oidc.start');
+        ->where('provider', 'google|switch')->block(45, 10)->name('oidc.start');
     Route::get('auth/oidc/{provider}/callback', [OidcAuthenticationController::class, 'callback'])
-        ->where('provider', 'google|switch')->name('oidc.callback');
-    Route::get('auth/oidc/contact', [OidcAuthenticationController::class, 'contact'])->name('oidc.contact');
-    Route::post('auth/oidc/contact', [OidcAuthenticationController::class, 'storeContact'])->name('oidc.contact.store');
+        ->where('provider', 'google|switch')->block(45, 10)->name('oidc.callback');
+    Route::get('auth/microsoft', [OidcAuthenticationController::class, 'microsoftIndex'])->name('microsoft.index');
+    Route::post('auth/microsoft/organizations/{organization}', [OidcAuthenticationController::class, 'startMicrosoft'])
+        ->where('organization', '[a-z0-9-]{1,40}')->block(45, 10)->name('microsoft.start');
+    Route::get('auth/microsoft/callback', [OidcAuthenticationController::class, 'microsoftCallback'])->block(45, 10)->name('microsoft.callback');
+    Route::get('auth/oidc/contact', [OidcAuthenticationController::class, 'contact'])->block(45, 10)->name('oidc.contact');
+    Route::post('auth/oidc/contact', [OidcAuthenticationController::class, 'storeContact'])->block(45, 10)->name('oidc.contact.store');
     Route::get('auth/oidc/contact/verify/{proof}', [OidcAuthenticationController::class, 'verifyContact'])
-        ->middleware('signed')->name('oidc.contact.verify');
+        ->middleware('signed')->block(45, 10)->name('oidc.contact.verify');
     Route::post('auth/oidc/contact/verify/{proof}', [OidcAuthenticationController::class, 'completeContact'])
-        ->middleware('signed')->name('oidc.contact.complete');
+        ->middleware('signed')->block(45, 10)->name('oidc.contact.complete');
 });
 
 require __DIR__.'/settings.php';

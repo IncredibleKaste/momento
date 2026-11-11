@@ -11,6 +11,7 @@ import { register } from '@/routes';
 import { store } from '@/routes/login';
 import { start as oidcStart } from '@/routes/oidc';
 import { request } from '@/routes/password';
+import { index as microsoftIndex } from '@/routes/microsoft';
 import PasskeyVerify from '@/components/passkey-verify';
 
 type PageProps = {
@@ -24,6 +25,7 @@ type Props = {
     canResetPassword: boolean;
     canGoogleLogin?: boolean;
     canSwitchLogin?: boolean;
+    canMicrosoftLogin?: boolean;
 };
 
 export default function Login({
@@ -31,6 +33,7 @@ export default function Login({
     canResetPassword,
     canGoogleLogin = false,
     canSwitchLogin = false,
+    canMicrosoftLogin = false,
 }: Props) {
     const oidcErrors = usePage<PageProps>().props.errors?.oidc;
     const oidcError = Array.isArray(oidcErrors) ? oidcErrors[0] : oidcErrors;
@@ -55,33 +58,6 @@ export default function Login({
                 {({ processing, errors }) => (
                     <>
                         <div className="grid gap-5">
-                            {canGoogleLogin && (
-                                <Button
-                                    asChild
-                                    variant="outline"
-                                    className="w-full"
-                                >
-                                    <a href={oidcStart.url('google')}>
-                                        Continue with Google
-                                    </a>
-                                </Button>
-                            )}
-                            {canSwitchLogin && (
-                                <Button
-                                    asChild
-                                    variant="outline"
-                                    className="w-full"
-                                >
-                                    <a href={oidcStart.url('switch')}>
-                                        Continue with SWITCH edu-ID
-                                    </a>
-                                </Button>
-                            )}
-                            {(canGoogleLogin || canSwitchLogin) && (
-                                <div className="border-t border-border pt-4 text-center text-xs text-muted-foreground">
-                                    or log in with a local account
-                                </div>
-                            )}
                             <div className="grid gap-2">
                                 <Label htmlFor="email">Email</Label>
                                 <Input
@@ -152,6 +128,46 @@ export default function Login({
                                 {processing && <Spinner />}
                                 Sign in
                             </Button>
+                            {(canGoogleLogin ||
+                                canSwitchLogin ||
+                                canMicrosoftLogin) && (
+                                <div className="border-t border-border pt-4 text-center text-xs text-muted-foreground">
+                                    or sign in with a provider
+                                </div>
+                            )}
+                            {canGoogleLogin && (
+                                <Button
+                                    asChild
+                                    variant="outline"
+                                    className="w-full"
+                                >
+                                    <a href={oidcStart.url('google')}>
+                                        Continue with Google
+                                    </a>
+                                </Button>
+                            )}
+                            {canSwitchLogin && (
+                                <Button
+                                    asChild
+                                    variant="outline"
+                                    className="w-full"
+                                >
+                                    <a href={oidcStart.url('switch')}>
+                                        Continue with SWITCH edu-ID
+                                    </a>
+                                </Button>
+                            )}
+                            {canMicrosoftLogin && (
+                                <Button
+                                    asChild
+                                    variant="outline"
+                                    className="w-full"
+                                >
+                                    <a href={microsoftIndex.url()}>
+                                        Continue with Microsoft
+                                    </a>
+                                </Button>
+                            )}
                         </div>
 
                         <div className="text-center text-sm text-muted-foreground">

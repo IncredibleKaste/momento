@@ -18,6 +18,7 @@ class OidcIdentityFactory extends Factory
             'provider' => 'google',
             'issuer' => 'https://accounts.google.com',
             'subject' => fake()->uuid(),
+            'stable_subject' => null,
         ];
     }
 }

@@ -15,10 +15,11 @@ use Illuminate\Support\Carbon;
  * @property string $provider
  * @property string $issuer
  * @property string $subject
+ * @property string|null $stable_subject
  * @property string|null $institution_domain
  * @property Carbon|null $disabled_at
  */
-#[Fillable(['user_id', 'provider', 'issuer', 'subject', 'institution_domain'])]
+#[Fillable(['user_id', 'provider', 'issuer', 'subject', 'stable_subject', 'institution_domain'])]
 class OidcIdentity extends Model
 {
     /** @use HasFactory<OidcIdentityFactory> */

@@ -18,7 +18,7 @@ class EnsureAccountIsActive
         if ($user) {
             $identity = blank($user->password) ? OidcIdentity::query()->where('user_id', $user->id)->first() : null;
             if ($user->disabled_at || (blank($user->password) && (! $identity || $identity->disabled_at
-                || ! app(OidcAuthentication::class)->providerAllowsIdentity($identity->provider, $identity->issuer, $identity->institution_domain)))) {
+                || ! app(OidcAuthentication::class)->providerAllowsIdentity($identity->provider, $identity->issuer, $identity->institution_domain, $identity->stable_subject)))) {
                 Auth::logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();

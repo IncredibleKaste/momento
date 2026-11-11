@@ -10,6 +10,15 @@ $decodeDomains = static function (mixed $value): array {
     return is_array($domains) ? array_values(array_filter($domains, 'is_string')) : [];
 };
 
+$decodeMicrosoftTenants = static function (mixed $value): array {
+    if (! is_string($value)) {
+        return [];
+    }
+    $tenants = json_decode($value, true);
+
+    return is_array($tenants) ? $tenants : [];
+};
+
 return [
 
     /*
@@ -36,6 +45,13 @@ return [
         'redirect_uri' => env('SWITCH_REDIRECT_URI', rtrim(config('app.url'), '/').'/auth/oidc/switch/callback'),
         'environment' => env('SWITCH_ENVIRONMENT'),
         'institutional_domains' => $decodeDomains(env('SWITCH_INSTITUTIONAL_DOMAINS', '[]')),
+    ],
+
+    'microsoft' => [
+        'client_id' => env('MICROSOFT_CLIENT_ID'),
+        'client_secret' => env('MICROSOFT_CLIENT_SECRET'),
+        'redirect_uri' => env('MICROSOFT_REDIRECT_URI', rtrim(config('app.url'), '/').'/auth/microsoft/callback'),
+        'tenants' => $decodeMicrosoftTenants(env('MICROSOFT_TENANTS', '{}')),
     ],
 
     'postmark' => [

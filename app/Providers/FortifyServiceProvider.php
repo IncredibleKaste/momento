@@ -82,6 +82,7 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::loginView(fn (Request $request) => Inertia::render('auth/login', [
             'canGoogleLogin' => app(OidcAuthentication::class)->providerEnabled('google'),
             'canSwitchLogin' => app(OidcAuthentication::class)->providerEnabled('switch'),
+            'canMicrosoftLogin' => app(OidcAuthentication::class)->providerEnabled('microsoft'),
             'canResetPassword' => Features::enabled(Features::resetPasswords()),
             'status' => $request->session()->get('status'),
         ]));

@@ -73,9 +73,12 @@ jobs:
             tests/Feature/Auth/AuthenticationRateLimitTest.php \
             tests/Feature/Auth/ServiceFailureTest.php \
             tests/Feature/Auth/OidcAuthenticationTest.php \
+            tests/Feature/Auth/MicrosoftAuthenticationTest.php \
             tests/Feature/Auth/OidcAuthenticationConcurrencyTest.php
           REDIS_PORT=1 php artisan test --compact \
             tests/Feature/Auth/ServiceFailureTest.php --filter='an unavailable Redis limiter'
+          REDIS_PORT=1 php artisan test --compact \
+            tests/Feature/Auth/ServiceFailureTest.php --filter='unavailable Redis session lock'
 
       - name: Check passkey authentication with PostgreSQL and Redis
         env:

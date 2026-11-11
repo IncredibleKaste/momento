@@ -75,3 +75,35 @@ it('reverses the OIDC schema while preserving local accounts without passwordles
     expect(Schema::hasTable('oidc_identities'))->toBeFalse()
         ->and(Schema::hasColumn('users', 'disabled_at'))->toBeFalse();
 });
+
+it('refuses stable identity rollback before changing the column or its rows', function () {
+    $identity = OidcIdentity::factory()->create([
+        'provider' => 'microsoft',
+        'issuer' => 'https://login.microsoftonline.com/11111111-1111-4111-8111-111111111111/v2.0',
+        'subject' => 'stable-rollback-subject',
+        'stable_subject' => '33333333-3333-4333-8333-333333333333',
+    ]);
+    $migration = require database_path('migrations/2026_11_11_000001_add_oidc_stable_subject.php');
+
+    expect(fn () => $migration->down())->toThrow(RuntimeException::class, 'Cannot remove stable OIDC identity bindings while stable identities remain.');
+    expect(Schema::hasColumn('oidc_identities', 'stable_subject'))->toBeTrue();
+    $this->assertDatabaseHas('oidc_identities', ['id' => $identity->id, 'stable_subject' => $identity->stable_subject]);
+    $other = User::factory()->create(['password' => null]);
+    expect(fn () => OidcIdentity::factory()->create([
+        'user_id' => $other->id,
+        'provider' => $identity->provider,
+        'issuer' => $identity->issuer,
+        'subject' => 'different-stable-rollback-subject',
+        'stable_subject' => $identity->stable_subject,
+    ]))->toThrow(UniqueConstraintViolationException::class);
+});
+
+it('removes the stable identity column cleanly when no provider uses it', function () {
+    $identity = OidcIdentity::factory()->create(['provider' => 'google', 'stable_subject' => null]);
+    $migration = require database_path('migrations/2026_11_11_000001_add_oidc_stable_subject.php');
+
+    $migration->down();
+
+    expect(Schema::hasColumn('oidc_identities', 'stable_subject'))->toBeFalse();
+    $this->assertDatabaseHas('oidc_identities', ['id' => $identity->id, 'subject' => $identity->subject]);
+});

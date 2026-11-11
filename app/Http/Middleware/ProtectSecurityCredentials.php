@@ -14,7 +14,8 @@ class ProtectSecurityCredentials
     public function handle(Request $request, Closure $next): Response
     {
         $management = ($request->routeIs('two-factor.*') && ! $request->routeIs('two-factor.login*'))
-            || ($request->routeIs('passkey.*') && ! $request->routeIs('passkey.login*'));
+            || ($request->routeIs('passkey.*') && ! $request->routeIs('passkey.login*'))
+            || $request->routeIs('security.edit');
         $challenge = $request->routeIs('two-factor.login.store');
 
         if (! $management && ! $challenge) {

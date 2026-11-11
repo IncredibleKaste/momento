@@ -28,6 +28,35 @@ class OidcAuthenticationController extends Controller
 {
     public function start(Request $request, string $provider, OidcAuthentication $oidc): HttpResponse|RedirectResponse
     {
+        return $this->startProvider($request, $provider, $oidc);
+    }
+
+    public function microsoftIndex(OidcAuthentication $oidc): Response|RedirectResponse
+    {
+        $organizations = $oidc->microsoftOrganizations();
+        if (! $oidc->providerEnabled('microsoft') || $organizations === []) {
+            return $this->failure();
+        }
+
+        return Inertia::render('auth/microsoft', [
+            'organizations' => array_map(fn (string $key, array $organization): array => ['key' => $key, 'name' => $organization['name']],
+                array_keys($organizations), array_values($organizations)),
+        ]);
+    }
+
+    public function startMicrosoft(Request $request, string $organization, OidcAuthentication $oidc): HttpResponse|RedirectResponse
+    {
+        $request->session()->forget(['oidc.transaction', 'oidc.pending']);
+        $entry = $oidc->microsoftOrganizations()[$organization] ?? null;
+        if (! is_array($entry)) {
+            return $this->failure();
+        }
+
+        return $this->startProvider($request, 'microsoft', $oidc, $organization, $entry['id']);
+    }
+
+    private function startProvider(Request $request, string $provider, OidcAuthentication $oidc, ?string $tenantSlug = null, ?string $tenantId = null): HttpResponse|RedirectResponse
+    {
         $request->session()->forget(['oidc.transaction', 'oidc.pending']);
         try {
             if (! $oidc->providerEnabled($provider)) {
@@ -37,6 +66,7 @@ class OidcAuthenticationController extends Controller
                 'state' => Str::random(64),
                 'nonce' => Str::random(64),
                 'code_verifier' => Str::random(64),
+                ...($provider === 'microsoft' ? ['tenant_slug' => $tenantSlug, 'tenant_id' => $tenantId] : []),
             ];
             $url = $oidc->authorizationUrl($provider, $transaction);
             $request->session()->put('oidc.transaction', [
@@ -52,6 +82,16 @@ class OidcAuthenticationController extends Controller
     }
 
     public function callback(Request $request, string $provider, OidcAuthentication $oidc): RedirectResponse
+    {
+        return $this->completeCallback($request, $provider, $oidc);
+    }
+
+    public function microsoftCallback(Request $request, OidcAuthentication $oidc): RedirectResponse
+    {
+        return $this->completeCallback($request, 'microsoft', $oidc);
+    }
+
+    private function completeCallback(Request $request, string $provider, OidcAuthentication $oidc): RedirectResponse
     {
         $transaction = $request->session()->pull('oidc.transaction');
         $request->session()->forget('oidc.pending');
@@ -76,12 +116,14 @@ class OidcAuthenticationController extends Controller
             $stored = OidcIdentity::query()->with('user')
                 ->where('provider', $identity['provider'])
                 ->where('issuer', $identity['issuer'])
-                ->where('subject', $identity['subject'])
+                ->when($identity['stable_subject'] !== null,
+                    fn ($query) => $query->where('stable_subject', $identity['stable_subject']),
+                    fn ($query) => $query->where('subject', $identity['subject']))
                 ->first();
             if ($stored !== null) {
-                if ($stored->disabled_at !== null || $stored->user->disabled_at !== null
+                if ($stored->subject !== $identity['subject'] || $stored->disabled_at !== null || $stored->user->disabled_at !== null
                     || filled($stored->user->getAuthPassword())
-                    || ! $oidc->providerAllowsIdentity($stored->provider, $stored->issuer, $stored->institution_domain)) {
+                    || ! $oidc->providerAllowsIdentity($stored->provider, $stored->issuer, $stored->institution_domain, $stored->stable_subject)) {
                     return $this->failure();
                 }
                 Auth::login($stored->user);
@@ -179,6 +221,7 @@ class OidcAuthenticationController extends Controller
                     'provider' => $pending['provider'],
                     'issuer' => $pending['issuer'],
                     'subject' => $pending['subject'],
+                    'stable_subject' => $pending['stable_subject'],
                     'institution_domain' => $pending['institution_domain'],
                 ])->save();
 
@@ -200,16 +243,17 @@ class OidcAuthenticationController extends Controller
         return to_route('dashboard');
     }
 
-    /** @return array{provider: string, issuer: string, subject: string, institution_domain: string|null, name: string, expires_at: int, flow: string}|null */
+    /** @return array{provider: string, issuer: string, subject: string, stable_subject: string|null, institution_domain: string|null, name: string, expires_at: int, flow: string}|null */
     private function pendingIdentity(Request $request, OidcAuthentication $oidc): ?array
     {
         $pending = $request->session()->get('oidc.pending');
         if (! is_array($pending) || ! is_string($pending['provider'] ?? null) || ! is_string($pending['issuer'] ?? null)
             || ! is_string($pending['subject'] ?? null) || ! is_string($pending['name'] ?? null)
+            || ! (is_string($pending['stable_subject'] ?? null) || ($pending['stable_subject'] ?? null) === null)
             || ! (is_string($pending['institution_domain'] ?? null) || ($pending['institution_domain'] ?? null) === null)
             || ! is_string($pending['flow'] ?? null) || ! is_int($pending['expires_at'] ?? null)
             || $pending['expires_at'] <= now()->timestamp
-            || ! $oidc->providerAllowsIdentity($pending['provider'], $pending['issuer'], $pending['institution_domain'])) {
+            || ! $oidc->providerAllowsIdentity($pending['provider'], $pending['issuer'], $pending['institution_domain'], $pending['stable_subject'] ?? null)) {
             return null;
         }
 
@@ -217,6 +261,7 @@ class OidcAuthenticationController extends Controller
             'provider' => $pending['provider'],
             'issuer' => $pending['issuer'],
             'subject' => $pending['subject'],
+            'stable_subject' => $pending['stable_subject'] ?? null,
             'institution_domain' => $pending['institution_domain'],
             'name' => $pending['name'],
             'expires_at' => $pending['expires_at'],
@@ -224,7 +269,7 @@ class OidcAuthenticationController extends Controller
         ];
     }
 
-    /** @return array{provider: string, issuer: string, subject: string, institution_domain: string|null, name: string, expires_at: int, flow: string, contact: array{name: string, email: string}, proof: string}|null */
+    /** @return array{provider: string, issuer: string, subject: string, stable_subject: string|null, institution_domain: string|null, name: string, expires_at: int, flow: string, contact: array{name: string, email: string}, proof: string}|null */
     private function pendingContact(Request $request, OidcAuthentication $oidc, string $proof): ?array
     {
         $pending = $this->pendingIdentity($request, $oidc);
@@ -260,7 +305,10 @@ class OidcAuthenticationController extends Controller
     private function identityExists(array $pending): bool
     {
         return OidcIdentity::query()->where('provider', $pending['provider'])
-            ->where('issuer', $pending['issuer'])->where('subject', $pending['subject'])->exists();
+            ->where('issuer', $pending['issuer'])
+            ->where(fn ($query) => $query->where('subject', $pending['subject'])
+                ->when($pending['stable_subject'] !== null, fn ($query) => $query->orWhere('stable_subject', $pending['stable_subject'])))
+            ->exists();
     }
 
     /** @param array<string, mixed> $pending */
