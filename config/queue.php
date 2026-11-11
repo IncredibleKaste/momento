@@ -53,6 +53,15 @@ return [
             'after_commit' => false,
         ],
 
+        'conversation_attachments' => [
+            'driver' => 'database',
+            'connection' => null,
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => 'conversation-attachments',
+            'retry_after' => 340,
+            'after_commit' => false,
+        ],
+
         'beanstalkd' => [
             'driver' => 'beanstalkd',
             'host' => env('BEANSTALKD_QUEUE_HOST', 'localhost'),

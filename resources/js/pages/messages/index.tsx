@@ -15,6 +15,13 @@ import ConversationRequestList, {
     ConversationRequestActions,
     type ConversationRequestPage,
 } from '@/components/conversation-request-list';
+import AttachmentComposer, {
+    type AttachmentCapabilities,
+    type PendingAttachmentSend,
+} from '@/components/attachment-composer';
+import MessageAttachments, {
+    type MessageAttachment,
+} from '@/components/message-attachments';
 import MessageRecipientLookup from '@/components/message-recipient-lookup';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -46,6 +53,8 @@ type Message = {
     senderName: string;
     body: string;
     createdAt: string | null;
+    attachments: MessageAttachment[];
+    attachmentsHidden: boolean;
 };
 
 type Thread = {
@@ -58,6 +67,8 @@ type Thread = {
     isLatestPage: boolean;
     canSend: boolean;
     requestPermission: { id: number; canStop: boolean; mutual: boolean } | null;
+    attachmentCapabilities: AttachmentCapabilities;
+    pendingAttachmentSend: PendingAttachmentSend;
 };
 
 type SelectedRecipient = {
@@ -356,6 +367,10 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
     const pendingRead = useRef(0);
     const composer = useRef<HTMLTextAreaElement>(null);
     const [failed, setFailed] = useState(false);
+    const [attachmentFlow, setAttachmentFlow] = useState({
+        hasFiles: false,
+        pending: false,
+    });
     const form = useForm({ body: '', nonce: crypto.randomUUID() });
     const readRequest = useHttp();
     const poll = usePoll(
@@ -464,6 +479,8 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
         if (
             form.processing ||
             submitLock.current ||
+            attachmentFlow.hasFiles ||
+            attachmentFlow.pending ||
             form.data.body.trim().length === 0
         )
             return;
@@ -622,7 +639,12 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                                 <p className="sr-only">
                                     {own ? 'You' : message.senderName}
                                 </p>
-                                <p>{message.body}</p>
+                                {message.body !== '' && <p>{message.body}</p>}
+                                <MessageAttachments
+                                    attachments={message.attachments}
+                                    hidden={message.attachmentsHidden}
+                                    authorName={message.senderName}
+                                />
                             </article>
                         );
                     })
@@ -654,7 +676,7 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                             rows={1}
                             maxLength={4000}
                             value={form.data.body}
-                            readOnly={form.processing}
+                            readOnly={form.processing || attachmentFlow.pending}
                             aria-invalid={Boolean(form.errors.body)}
                             aria-describedby="message-body-help message-body-error"
                             onChange={(event) =>
@@ -664,29 +686,56 @@ function ThreadPanel({ thread, search }: { thread: Thread; search: string }) {
                             placeholder="Write a message…"
                             className="max-h-[4.5rem] min-h-11 w-full min-w-0 resize-none overflow-y-auto rounded-3xl border-0 bg-transparent py-2 pr-32 pl-4 text-base leading-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring min-[601px]:text-sm"
                         />
-                        <Button
-                            type="submit"
-                            disabled={
-                                form.processing ||
-                                form.data.body.trim().length === 0
-                            }
-                            variant="ghost"
-                            className="absolute right-0 bottom-0 min-h-11 min-w-11 rounded-full text-foreground"
-                        >
-                            <Send aria-hidden="true" className="size-5" />
-                            {form.processing
-                                ? 'Sending…'
-                                : failed
-                                  ? 'Retry'
-                                  : 'Send'}
-                        </Button>
+                        {!attachmentFlow.hasFiles &&
+                            !attachmentFlow.pending && (
+                                <Button
+                                    type="submit"
+                                    disabled={
+                                        form.processing ||
+                                        form.data.body.trim().length === 0
+                                    }
+                                    variant="ghost"
+                                    className="absolute right-0 bottom-0 min-h-11 min-w-11 rounded-full text-foreground"
+                                >
+                                    <Send
+                                        aria-hidden="true"
+                                        className="size-5"
+                                    />
+                                    {form.processing
+                                        ? 'Sending…'
+                                        : failed
+                                          ? 'Retry'
+                                          : 'Send'}
+                                </Button>
+                            )}
                     </div>
                     <p
                         id="message-body-help"
                         className="mt-1 text-xs text-muted-foreground"
                     >
-                        Enter sends. Shift+Enter adds a line.
+                        {attachmentFlow.hasFiles
+                            ? 'The attachment button sends these files with this text.'
+                            : attachmentFlow.pending
+                              ? 'Check the attachment status before sending another message.'
+                              : 'Enter sends. Shift+Enter adds a line.'}
                     </p>
+                    <AttachmentComposer
+                        conversationId={thread.id}
+                        body={form.data.body}
+                        capabilities={thread.attachmentCapabilities}
+                        pendingAttachmentSend={thread.pendingAttachmentSend}
+                        onSent={() => {
+                            form.setData({
+                                body: '',
+                                nonce: crypto.randomUUID(),
+                            });
+                            if (composer.current)
+                                composer.current.style.height = 'auto';
+                            form.clearErrors();
+                            setFailed(false);
+                        }}
+                        onFlowChange={setAttachmentFlow}
+                    />
                 </form>
             ) : (
                 <p className="border-t border-border p-4 text-sm text-muted-foreground">

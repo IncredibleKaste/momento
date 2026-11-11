@@ -8,6 +8,7 @@ use App\Services\OidcAuthentication;
 use Carbon\CarbonImmutable;
 use GuzzleHttp\Client;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Date;
@@ -38,6 +39,9 @@ class AppServiceProvider extends ServiceProvider
     {
         Auth::provider('local-credentials', fn ($app, array $config) => new LocalCredentialUserProvider($app['hash'], $config['model']));
         $this->configureDefaults();
+        DevCommands::artisan('queue:work photo_processing --queue=photo-processing --tries=1 --timeout=140', 'photos');
+        DevCommands::artisan('queue:work conversation_attachments --queue=conversation-attachments --tries=1 --timeout=300', 'attachments');
+        DevCommands::artisan('schedule:work', 'schedule');
         RateLimiter::for('follow-requests', function (Request $request): array {
             $actor = $request->user()->getAuthIdentifier();
             $member = $request->route('member');

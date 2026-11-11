@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\ManageConversationAttachments;
 use App\Actions\ManagePhotoPosts;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -14,3 +15,9 @@ Artisan::command('photo-posts:reconcile', function (ManagePhotoPosts $posts): vo
 })->purpose('Retry cleanup for bounded photo post operations');
 
 Schedule::command('photo-posts:reconcile')->everyMinute()->withoutOverlapping();
+
+Artisan::command('conversation-attachments:reconcile', function (ManageConversationAttachments $attachments): void {
+    $this->info('Reconciled '.$attachments->reconcile().' conversation attachment sends.');
+})->purpose('Recover stale conversation attachment sends and retry private media cleanup');
+
+Schedule::command('conversation-attachments:reconcile')->everyMinute()->withoutOverlapping();

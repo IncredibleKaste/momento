@@ -1,0 +1,779 @@
+<?php
+
+declare(strict_types=1);
+use Symfony\Component\Process\Process;
+
+require '/app/vendor/autoload.php';
+
+const FFMPEG_BIN = '/usr/bin/ffmpeg';
+const FFPROBE_BIN = '/usr/bin/ffprobe';
+const VIDEO_DECODER = '/usr/local/bin/conversation-video-decoder';
+const MAX_SYNTHETIC_AUDIO_FACTS_BYTES = 1_048_576;
+const MAX_SYNTHETIC_PCM_BYTES = 1_048_576;
+const SYNTHETIC_AUDIO_SAMPLE_RATE = 48_000;
+const SYNTHETIC_AUDIBLE_THRESHOLD = 0.01;
+
+$temporaryDirectory = sys_get_temp_dir().'/momento-video-probe-'.bin2hex(random_bytes(8));
+if (! mkdir($temporaryDirectory, 0700)) {
+    throw new RuntimeException('Could not create the temporary probe directory.');
+}
+$temporaryDirectory = realpath($temporaryDirectory);
+if (! is_string($temporaryDirectory)) {
+    throw new RuntimeException('Could not resolve the temporary probe directory.');
+}
+
+try {
+    ensure(is_executable(FFMPEG_BIN) && is_executable(FFPROBE_BIN) && is_executable(VIDEO_DECODER), 'Required native executable is missing.');
+    assertCommand([FFMPEG_BIN, '-version']);
+    assertCommand(['/usr/bin/timeout', '--version']);
+    assertCommand(['/usr/bin/prlimit', '--version']);
+
+    $ordinary = $temporaryDirectory.'/ordinary-end.mp4';
+    createFixture($ordinary, 3, false, true, metadataCanary: true, audioOffsetSeconds: 0.125);
+    ensure(moovIsAtEnd($ordinary), 'Ordinary fixture did not put moov at the end.');
+    ensure(in_array('H.26[45] User Data Unregistered SEI message', frameSideDataTypes($ordinary), true), 'Ordinary H.264 fixture lacks its benign x264 encoder-info SEI.');
+    $ordinaryOutput = $temporaryDirectory.'/ordinary-output.mp4';
+    decodeFixture($ordinary, $ordinaryOutput);
+
+    $fastStart = $temporaryDirectory.'/faststart.mp4';
+    createFixture($fastStart, 3, true, false);
+    ensure(! moovIsAtEnd($fastStart), 'Faststart fixture unexpectedly put moov at the end.');
+    decodeFixture($fastStart, $temporaryDirectory.'/faststart-output.mp4');
+
+    $explicitSdr = $temporaryDirectory.'/explicit-sdr.mp4';
+    createFixture($explicitSdr, 3, true, false, explicitSdr: true);
+    decodeFixture($explicitSdr, $temporaryDirectory.'/explicit-sdr-output.mp4');
+
+    $square = $temporaryDirectory.'/square-input.mp4';
+    createFixture($square, 2, true, false, width: 1600, height: 1600);
+    $squareFacts = decodeFixture($square, $temporaryDirectory.'/square-output.mp4');
+    ensure($squareFacts['width'] === 1440 && $squareFacts['height'] === 1440, 'Square output exceeded the Level 4.1 frame-size boundary.');
+
+    $hdrSideData = $temporaryDirectory.'/hdr-side-data.mp4';
+    createHdrSideDataFixture($hdrSideData);
+    assertHdrSideDataRejected($hdrSideData, $temporaryDirectory.'/hdr-side-data-output.mp4');
+
+    $rotated = $temporaryDirectory.'/rotated.mp4';
+    assertCommand([
+        FFMPEG_BIN, '-hide_banner', '-loglevel', 'error', '-y',
+        '-display_rotation:v:0', '90', '-i', $ordinary,
+        '-map', '0', '-c', 'copy', $rotated,
+    ]);
+    $fixtureRotation = syntheticDisplayRotation($rotated);
+    ensure($fixtureRotation !== null && abs(abs($fixtureRotation) - 90.0) < 0.01, 'Rotated synthetic fixture lacks the expected 90-degree display matrix.');
+    $rotatedFacts = decodeFixture($rotated, $temporaryDirectory.'/rotated-output.mp4');
+    ensure(
+        $rotatedFacts['width'] === 240 && $rotatedFacts['height'] === 320,
+        'Rotation pixels expected 240x320; got '.$rotatedFacts['width'].'x'.$rotatedFacts['height'].'.',
+    );
+
+    $exactLimit = $temporaryDirectory.'/exact-60.mp4';
+    createFixture($exactLimit, 60, true, true, framesPerSecond: 1);
+    decodeFixture($exactLimit, $temporaryDirectory.'/exact-60-output.mp4', includeExactDurationFacts: true);
+    $exactOffsetLimit = $temporaryDirectory.'/exact-60-offset.mp4';
+    createFixture($exactOffsetLimit, 60, true, true, framesPerSecond: 1, audioDuration: 59.875, audioOffsetSeconds: 0.125);
+    decodeFixture($exactOffsetLimit, $temporaryDirectory.'/exact-60-offset-output.mp4', includeExactDurationFacts: true);
+    $ordinaryInputAudioFacts = syntheticAudioFacts($ordinary);
+    $ordinaryOutputAudioFacts = syntheticAudioFacts($ordinaryOutput);
+    assertShortAudioVideoTimingPreserved(
+        $ordinaryInputAudioFacts,
+        $ordinaryOutputAudioFacts,
+        syntheticAudibleOnset($ordinary, $ordinaryInputAudioFacts),
+        syntheticAudibleOnset($ordinaryOutput, $ordinaryOutputAudioFacts),
+    );
+
+    $tooLong = $temporaryDirectory.'/too-long.mp4';
+    createFixture($tooLong, 61, true, false, framesPerSecond: 1);
+    assertRejected($tooLong, $temporaryDirectory.'/too-long-output.mp4');
+
+    $forgedDuration = $temporaryDirectory.'/forged-duration.mp4';
+    copy($tooLong, $forgedDuration);
+    file_put_contents($forgedDuration, rewriteDurationHeaders(file_get_contents($forgedDuration), 60));
+    assertRejected($forgedDuration, $temporaryDirectory.'/forged-duration-output.mp4');
+
+    $forgedLongAudio = $temporaryDirectory.'/forged-long-audio.mp4';
+    createFixture($forgedLongAudio, 60, true, true, framesPerSecond: 1, audioDuration: 61);
+    $forgedAudioBytes = file_get_contents($forgedLongAudio);
+    ensure(is_string($forgedAudioBytes), 'Could not read the synthetic long-audio fixture.');
+    file_put_contents($forgedLongAudio, rewriteDurationHeaders($forgedAudioBytes, 60));
+    $forgedAudioFacts = syntheticAudioFacts($forgedLongAudio);
+    ensure(
+        $forgedAudioFacts['available']
+            && $forgedAudioFacts['formatDurationSeconds'] !== null
+            && $forgedAudioFacts['formatDurationSeconds'] <= 60
+            && $forgedAudioFacts['audioDurationSeconds'] !== null
+            && $forgedAudioFacts['audioDurationSeconds'] <= 60,
+        'Forged long-audio metadata did not hide the actual duration before decoder rejection: '.json_encode($forgedAudioFacts, JSON_THROW_ON_ERROR),
+    );
+    ensure(
+        is_int($forgedAudioFacts['sampleRate'])
+            && is_int($forgedAudioFacts['effectiveSamples'])
+            && $forgedAudioFacts['effectiveSamples'] > ($forgedAudioFacts['sampleRate'] * 60),
+        'The forged audio fixture does not contain more than 60 seconds of decoded audio samples: '.json_encode($forgedAudioFacts, JSON_THROW_ON_ERROR),
+    );
+    assertRejected($forgedLongAudio, $temporaryDirectory.'/forged-long-audio-output.mp4', expectedPhase: 'frame_scan');
+
+    $malformed = $temporaryDirectory.'/malformed.mp4';
+    file_put_contents($malformed, "not an MP4\0".str_repeat('x', 4096));
+    assertRejected($malformed, $temporaryDirectory.'/malformed-output.mp4');
+
+    $truncated = $temporaryDirectory.'/truncated.mp4';
+    copy($ordinary, $truncated);
+    $size = filesize($truncated);
+    ensure(is_int($size) && $size > 128, 'Truncation fixture is too small.');
+    file_put_contents($truncated, file_get_contents($truncated, false, null, 0, $size - 80));
+    assertRejected($truncated, $temporaryDirectory.'/truncated-output.mp4');
+
+    $brokenMedia = $temporaryDirectory.'/broken-media.mp4';
+    createFixture($brokenMedia, 3, true, false);
+    $brokenBytes = file_get_contents($brokenMedia);
+    ensure(is_string($brokenBytes) && strlen($brokenBytes) > 256, 'Faststart corruption fixture is too small.');
+    file_put_contents($brokenMedia, substr($brokenBytes, 0, -256));
+    assertRejected($brokenMedia, $temporaryDirectory.'/broken-media-output.mp4');
+
+    $extraStream = $temporaryDirectory.'/extra-stream.mp4';
+    assertCommand([
+        FFMPEG_BIN, '-hide_banner', '-loglevel', 'error', '-y',
+        '-f', 'lavfi', '-i', 'color=c=blue:s=320x240:r=10:d=2',
+        '-f', 'lavfi', '-i', 'color=c=red:s=320x240:r=10:d=2',
+        '-map', '0:v', '-map', '1:v', '-c:v', 'libx264', '-threads', '1', $extraStream,
+    ]);
+    assertRejected($extraStream, $temporaryDirectory.'/extra-stream-output.mp4');
+
+    $externalReference = $temporaryDirectory.'/external-reference.mp4';
+    $externalReferenceData = $temporaryDirectory.'/external-reference-data.mp4';
+    ensure(copy($ordinary, $externalReferenceData), 'Could not create the synthetic external media copy.');
+    $ordinaryBytes = file_get_contents($ordinary);
+    ensure(is_string($ordinaryBytes), 'Could not read the ordinary synthetic fixture.');
+    $rewritten = zeroMediaDataPayload(rewriteExternalDataReference($ordinaryBytes, $externalReferenceData));
+    file_put_contents($externalReference, $rewritten);
+    assertExternalReferenceResolves($externalReference);
+    assertRejected($externalReference, $temporaryDirectory.'/external-reference-output.mp4');
+    ensure(! file_exists($temporaryDirectory.'/external-reference-output.mp4'), 'External dref failure left partial output behind.');
+
+    echo "Synthetic MP4 decoder checks passed (ordinary seekable MP4, faststart, rotation, strict 60s cap, forged long-audio denial, malformed/truncated, extra stream, external dref denial).\n";
+} finally {
+    foreach (glob($temporaryDirectory.'/*') ?: [] as $path) {
+        if (is_file($path) || is_link($path)) {
+            @unlink($path);
+        }
+    }
+    @rmdir($temporaryDirectory);
+}
+
+/** @param list<string> $command */
+function assertCommand(array $command): string
+{
+    $process = new Process($command, timeout: 20);
+    $process->run();
+    if (! $process->isSuccessful()) {
+        throw new RuntimeException('Synthetic fixture command failed.');
+    }
+
+    return $process->getOutput();
+}
+
+function ensure(bool $condition, string $message): void
+{
+    if (! $condition) {
+        throw new RuntimeException($message);
+    }
+}
+
+function createFixture(
+    string $path,
+    int $duration,
+    bool $fastStart,
+    bool $audio,
+    int $framesPerSecond = 10,
+    bool $metadataCanary = false,
+    int $width = 320,
+    int $height = 240,
+    bool $explicitSdr = false,
+    ?float $audioDuration = null,
+    float $audioOffsetSeconds = 0.0,
+): void {
+    $command = [
+        FFMPEG_BIN, '-hide_banner', '-loglevel', 'error', '-y',
+        '-f', 'lavfi', '-i', "color=c=blue:s={$width}x{$height}:r={$framesPerSecond}:d={$duration}",
+    ];
+    if ($audio) {
+        if ($audioOffsetSeconds !== 0.0) {
+            $command = [...$command, '-itsoffset', (string) $audioOffsetSeconds];
+        }
+        $audioDuration ??= $duration;
+        $command = [...$command, '-f', 'lavfi', '-i', "sine=frequency=440:sample_rate=48000:duration={$audioDuration}"];
+    }
+    $command = [...$command, '-map', '0:v:0'];
+    if ($audio) {
+        $command = [...$command, '-map', '1:a:0'];
+    }
+    $command = [...$command, '-c:v', 'libx264', '-threads', '1', '-pix_fmt', 'yuv420p'];
+    if ($audio) {
+        $command = [...$command, '-c:a', 'aac'];
+    } else {
+        $command = [...$command, '-an'];
+    }
+    if ($fastStart) {
+        $command = [...$command, '-movflags', '+faststart'];
+    }
+    if ($metadataCanary) {
+        $command = [...$command, '-metadata', 'comment=MOMENTO_INPUT_METADATA_CANARY'];
+    }
+    if ($explicitSdr) {
+        $command = [...$command, '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709'];
+    }
+    $command[] = $path;
+    assertCommand($command);
+}
+
+function createHdrSideDataFixture(string $path): void
+{
+    assertCommand([
+        FFMPEG_BIN, '-hide_banner', '-loglevel', 'error', '-y',
+        '-f', 'lavfi', '-i', 'color=c=blue:s=160x160:r=2:d=2',
+        '-c:v', 'libx265', '-threads', '1', '-pix_fmt', 'yuv420p',
+        '-x265-params', 'pools=1:frame-threads=1:repeat-headers=1:colorprim=bt709:transfer=bt709:colormatrix=bt709:master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(40000000,50):max-cll=1000,400',
+        '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', $path,
+    ]);
+}
+
+function assertHdrSideDataRejected(string $input, string $output): void
+{
+    $probe = json_decode(assertCommand([
+        FFPROBE_BIN, '-v', 'error', '-protocol_whitelist', 'file', '-f', 'mov',
+        '-show_streams', '-show_format', '-show_chapters', '-of', 'json', $input,
+    ]), true, flags: JSON_THROW_ON_ERROR);
+    $transfer = $probe['streams'][0]['color_transfer'] ?? null;
+    $sideDataTypes = array_column($probe['streams'][0]['side_data_list'] ?? [], 'side_data_type');
+    ensure(in_array($transfer, ['unknown', 'bt709'], true), 'HDR canary fixture must carry SDR or missing color tags.');
+    ensure(! array_intersect(['Mastering display metadata', 'Content light level metadata', 'DOVI configuration record'], $sideDataTypes), 'HDR side data unexpectedly appears at stream level.');
+    $frameTypes = frameSideDataTypes($input);
+    ensure(in_array('Mastering display metadata', $frameTypes, true) || in_array('Content light level metadata', $frameTypes, true), 'HDR fixture lacks frame-only mastering or content-light metadata.');
+    assertRejected($input, $output);
+}
+
+/** @return list<string> */
+function frameSideDataTypes(string $input): array
+{
+    $frameSideData = json_decode(assertCommand([
+        FFPROBE_BIN, '-v', 'error', '-protocol_whitelist', 'file', '-f', 'mov',
+        '-select_streams', 'v:0', '-show_frames', '-show_entries', 'frame_side_data=side_data_type', '-of', 'json', $input,
+    ]), true, flags: JSON_THROW_ON_ERROR);
+    $frameTypes = [];
+    foreach ($frameSideData['frames'] ?? [] as $frame) {
+        foreach ($frame['side_data_list'] ?? [] as $item) {
+            if (is_string($item['side_data_type'] ?? null)) {
+                $frameTypes[] = $item['side_data_type'];
+            }
+        }
+    }
+
+    return $frameTypes;
+}
+
+function syntheticDisplayRotation(string $path): ?float
+{
+    $probe = json_decode(assertCommand([
+        FFPROBE_BIN, '-v', 'error', '-protocol_whitelist', 'file', '-f', 'mov',
+        '-show_streams', '-of', 'json', $path,
+    ]), true, flags: JSON_THROW_ON_ERROR);
+    foreach (($probe['streams'] ?? []) as $stream) {
+        if (($stream['codec_type'] ?? null) !== 'video') {
+            continue;
+        }
+        foreach (($stream['side_data_list'] ?? []) as $sideData) {
+            if (($sideData['side_data_type'] ?? null) === 'Display Matrix'
+                && is_numeric($sideData['rotation'] ?? null)) {
+                return (float) $sideData['rotation'];
+            }
+        }
+    }
+
+    return null;
+}
+
+/** @return array{width: int, height: int} */
+function decodeFixture(string $input, string $output, bool $includeExactDurationFacts = false): array
+{
+    $process = new Process([VIDEO_DECODER, $input, $output], timeout: 140);
+    $process->run();
+    if (! $process->isSuccessful() || ! is_file($output)) {
+        $phase = decoderFailurePhase($process->getErrorOutput());
+        $message = 'The video decoder rejected a supported synthetic fixture.';
+        if ($phase !== null) {
+            $message = 'The video decoder rejected a supported synthetic fixture during '.$phase.'.';
+        }
+        if ($includeExactDurationFacts) {
+            $message .= ' Synthetic exact-60 audio facts: '.json_encode(syntheticAudioFacts($input), JSON_THROW_ON_ERROR);
+        }
+
+        throw new RuntimeException($message);
+    }
+    $facts = json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR);
+    if (! is_array($facts)
+        || ! is_int($facts['bytes'] ?? null)
+        || ! is_int($facts['width'] ?? null)
+        || ! is_int($facts['height'] ?? null)
+        || (! is_float($facts['durationSeconds'] ?? null) && ! is_int($facts['durationSeconds'] ?? null))
+        || filesize($output) !== $facts['bytes']
+        || $facts['bytes'] > 25_000_000
+        || $facts['durationSeconds'] <= 0
+        || $facts['durationSeconds'] > 60) {
+        throw new RuntimeException('The video decoder returned invalid output facts.');
+    }
+
+    $probe = json_decode(assertCommand([
+        FFPROBE_BIN, '-v', 'error', '-protocol_whitelist', 'file', '-f', 'mov',
+        '-show_streams', '-show_format', '-show_chapters', '-of', 'json', $output,
+    ]), true, flags: JSON_THROW_ON_ERROR);
+    if (! in_array('mp4', explode(',', (string) ($probe['format']['format_name'] ?? '')), true)) {
+        throw new RuntimeException('Decoder output is not a regular MP4 file.');
+    }
+    foreach ($probe['streams'] as $stream) {
+        if (($stream['codec_type'] ?? null) === 'video'
+            && (($stream['profile'] ?? null) !== 'High' || ($stream['level'] ?? null) !== 41 || ($stream['pix_fmt'] ?? null) !== 'yuv420p')) {
+            throw new RuntimeException('Transcoded video is outside the accepted H.264 Level 4.1 profile.');
+        }
+        foreach (($stream['tags'] ?? []) as $value) {
+            if (str_contains((string) $value, 'MOMENTO_')) {
+                throw new RuntimeException('Input metadata canary survived transcoding.');
+            }
+        }
+        if (($stream['codec_type'] ?? null) === 'video' && isset($stream['side_data_list'])) {
+            foreach ($stream['side_data_list'] as $sideData) {
+                if (isset($sideData['rotation']) && abs((float) $sideData['rotation']) > 0.01) {
+                    throw new RuntimeException('Rotation metadata remains in output.');
+                }
+            }
+        }
+    }
+    foreach (($probe['format']['tags'] ?? []) as $value) {
+        if (str_contains((string) $value, 'MOMENTO_')) {
+            throw new RuntimeException('Input container metadata canary survived transcoding.');
+        }
+    }
+    if (($probe['chapters'] ?? []) !== []) {
+        throw new RuntimeException('Input chapter metadata survived transcoding.');
+    }
+
+    return ['width' => $facts['width'], 'height' => $facts['height']];
+}
+
+function assertRejected(string $input, string $output, ?string $expectedPhase = null): void
+{
+    $process = new Process([VIDEO_DECODER, $input, $output], timeout: 140);
+    $process->run();
+    $phase = decoderFailurePhase($process->getErrorOutput());
+    $diagnostic = [
+        'fixture' => basename($input),
+        'exitCode' => $process->getExitCode(),
+        'successful' => $process->isSuccessful(),
+        'outputExists' => file_exists($output),
+        'outputIsLink' => is_link($output),
+    ];
+    if ($phase !== null) {
+        $diagnostic['phase'] = $phase;
+    }
+
+    if ($process->isSuccessful() || $diagnostic['outputExists'] || $diagnostic['outputIsLink']
+        || $phase === null || ($expectedPhase !== null && $phase !== $expectedPhase)) {
+        throw new RuntimeException('Invalid synthetic rejection: '.json_encode($diagnostic, JSON_THROW_ON_ERROR));
+    }
+}
+
+/** @return array<string, mixed> */
+function syntheticAudioFacts(string $path): array
+{
+    $process = new Process([
+        FFPROBE_BIN, '-v', 'error', '-protocol_whitelist', 'file', '-f', 'mov',
+        '-show_streams', '-show_format', '-show_frames', '-show_entries',
+        'format=duration:stream=codec_type,sample_rate,duration,start_time:frame=media_type,nb_samples,best_effort_timestamp_time,duration_time:frame_side_data=side_data_type,skip_samples,discard_padding',
+        '-of', 'json', $path,
+    ], timeout: 35);
+    $process->run();
+    if (! $process->isSuccessful() || strlen($process->getOutput()) > MAX_SYNTHETIC_AUDIO_FACTS_BYTES) {
+        return ['available' => false];
+    }
+
+    try {
+        $probe = json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR);
+    } catch (Throwable) {
+        return ['available' => false];
+    }
+    if (! is_array($probe)) {
+        return ['available' => false];
+    }
+
+    $formatDuration = syntheticNumber($probe['format']['duration'] ?? null);
+    $audioDuration = $audioStart = $audioPresentationEnd = $videoStart = $sampleRate = null;
+    foreach ($probe['streams'] ?? [] as $stream) {
+        if (! is_array($stream)) {
+            return ['available' => false];
+        }
+        if (($stream['codec_type'] ?? null) === 'audio') {
+            $sampleRate = filter_var($stream['sample_rate'] ?? null, FILTER_VALIDATE_INT);
+            $audioStart = syntheticNumber($stream['start_time'] ?? null);
+            $audioDuration = syntheticNumber($stream['duration'] ?? null);
+            if ($audioStart !== null && $audioDuration !== null) {
+                $presentationEnd = $audioStart + $audioDuration;
+                $audioPresentationEnd = is_finite($presentationEnd) ? $presentationEnd : null;
+            }
+        } elseif (($stream['codec_type'] ?? null) === 'video') {
+            $videoStart = syntheticNumber($stream['start_time'] ?? null);
+        }
+    }
+    if (! is_int($sampleRate) || $sampleRate < 1) {
+        return ['available' => false];
+    }
+
+    $decodedSamples = $skipSamples = $discardPadding = 0;
+    $firstAudioStart = $lastAudioFrame = null;
+    foreach ($probe['frames'] ?? [] as $frame) {
+        if (! is_array($frame)) {
+            return ['available' => false];
+        }
+        if (($frame['media_type'] ?? null) !== 'audio') {
+            continue;
+        }
+        $frameSamples = filter_var($frame['nb_samples'] ?? null, FILTER_VALIDATE_INT);
+        $timestamp = syntheticNumber($frame['best_effort_timestamp_time'] ?? null);
+        if (! is_int($frameSamples) || $frameSamples < 0 || $timestamp === null) {
+            return ['available' => false];
+        }
+        $frameSkip = $frameDiscard = 0;
+        foreach ($frame['side_data_list'] ?? [] as $sideData) {
+            if (! is_array($sideData)) {
+                return ['available' => false];
+            }
+            if (($sideData['side_data_type'] ?? null) === 'Skip Samples') {
+                $frameSkip += syntheticNonNegativeInteger($sideData['skip_samples'] ?? 0) ?? 0;
+                $frameDiscard += syntheticNonNegativeInteger($sideData['discard_padding'] ?? 0) ?? 0;
+            }
+        }
+        $decodedSamples += $frameSamples;
+        $skipSamples += $frameSkip;
+        $discardPadding += $frameDiscard;
+        $firstAudioStart ??= $timestamp + ($frameSkip / $sampleRate);
+        $lastAudioFrame = [
+            'nbSamples' => $frameSamples,
+            'ptsSeconds' => $timestamp,
+            'durationSeconds' => syntheticNumber($frame['duration_time'] ?? null),
+            'skipSamples' => $frameSkip,
+            'discardPadding' => $frameDiscard,
+        ];
+    }
+
+    return [
+        'available' => $lastAudioFrame !== null,
+        'formatDurationSeconds' => $formatDuration,
+        'audioDurationSeconds' => $audioDuration,
+        'audioStartSeconds' => $audioStart,
+        'presentationEndSeconds' => $audioPresentationEnd,
+        'videoStartSeconds' => $videoStart,
+        'firstAudioFrameSeconds' => $firstAudioStart,
+        'sampleRate' => $sampleRate,
+        'decodedSamples' => $decodedSamples,
+        'skipSamples' => $skipSamples,
+        'discardPadding' => $discardPadding,
+        'effectiveSamples' => $decodedSamples - $skipSamples - $discardPadding,
+        'lastAudioFrame' => $lastAudioFrame,
+    ];
+}
+
+function syntheticNumber(mixed $value): ?float
+{
+    if ((! is_string($value) && ! is_int($value) && ! is_float($value)) || ! is_numeric($value)) {
+        return null;
+    }
+    $number = (float) $value;
+
+    return is_finite($number) ? $number : null;
+}
+
+function syntheticNonNegativeInteger(mixed $value): ?int
+{
+    $integer = filter_var($value, FILTER_VALIDATE_INT);
+
+    return is_int($integer) && $integer >= 0 ? $integer : null;
+}
+
+/** @param array<string, mixed> $audioFacts */
+function syntheticAudibleOnset(string $path, array $audioFacts): ?float
+{
+    $framePts = $audioFacts['firstAudioFrameSeconds'] ?? null;
+    if (! is_float($framePts) || ($audioFacts['sampleRate'] ?? null) !== SYNTHETIC_AUDIO_SAMPLE_RATE) {
+        return null;
+    }
+
+    $process = new Process([
+        FFMPEG_BIN, '-nostdin', '-hide_banner', '-loglevel', 'error',
+        '-protocol_whitelist', 'file', '-f', 'mov', '-enable_drefs', '0', '-use_absolute_path', '0',
+        '-i', $path, '-map', '0:a:0', '-vn', '-sn', '-dn',
+        '-ac', '1', '-ar', (string) SYNTHETIC_AUDIO_SAMPLE_RATE, '-c:a', 'pcm_f32le', '-f', 'f32le', 'pipe:1',
+    ], timeout: 20);
+    $process->disableOutput();
+    $pcm = '';
+    $overflow = false;
+
+    try {
+        $process->start(function (string $type, string $data) use ($process, &$pcm, &$overflow): void {
+            if ($type !== Process::OUT) {
+                return;
+            }
+
+            if (strlen($pcm) + strlen($data) > MAX_SYNTHETIC_PCM_BYTES) {
+                $overflow = true;
+                $process->stop(0);
+
+                return;
+            }
+
+            $pcm .= $data;
+        });
+        $process->wait();
+    } catch (Throwable) {
+        return null;
+    }
+
+    if (! $process->isSuccessful() || $overflow || $pcm === '' || strlen($pcm) % 4 !== 0) {
+        return null;
+    }
+
+    for ($offset = 0; $offset < strlen($pcm); $offset += 4) {
+        $sample = unpack('gvalue', substr($pcm, $offset, 4))['value'] ?? null;
+        if (! is_float($sample) || ! is_finite($sample)) {
+            return null;
+        }
+        if (abs($sample) > SYNTHETIC_AUDIBLE_THRESHOLD) {
+            return $framePts + (intdiv($offset, 4) / SYNTHETIC_AUDIO_SAMPLE_RATE);
+        }
+    }
+
+    return null;
+}
+
+/** @param array<string, mixed> $inputFacts @param array<string, mixed> $outputFacts */
+function assertShortAudioVideoTimingPreserved(
+    array $inputFacts,
+    array $outputFacts,
+    ?float $inputAudibleOnset,
+    ?float $outputAudibleOnset,
+): void {
+    $inputVideoStart = $inputFacts['videoStartSeconds'] ?? null;
+    $outputVideoStart = $outputFacts['videoStartSeconds'] ?? null;
+    $inputDuration = $inputFacts['formatDurationSeconds'] ?? null;
+    $outputDuration = $outputFacts['formatDurationSeconds'] ?? null;
+    if (! is_float($inputAudibleOnset) || ! is_float($inputVideoStart)
+        || ! is_float($outputAudibleOnset) || ! is_float($outputVideoStart)
+        || ! is_float($inputDuration) || ! is_float($outputDuration)) {
+        throw new RuntimeException('Synthetic audible onset facts unavailable: '.json_encode([
+            'inputVideoStart' => $inputVideoStart,
+            'inputAudibleOnset' => $inputAudibleOnset,
+            'outputVideoStart' => $outputVideoStart,
+            'outputAudibleOnset' => $outputAudibleOnset,
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    $inputOffset = $inputAudibleOnset - $inputVideoStart;
+    $outputOffset = $outputAudibleOnset - $outputVideoStart;
+    $timingTolerance = (1024 / 48_000) + 0.001;
+    if (abs($inputOffset - 0.125) > $timingTolerance || abs($inputOffset - $outputOffset) > $timingTolerance) {
+        throw new RuntimeException('Synthetic audible A/V offsets differ: '.json_encode([
+            'expectedInputOffset' => 0.125,
+            'inputAudioStart' => $inputFacts['audioStartSeconds'] ?? null,
+            'inputVideoStart' => $inputVideoStart,
+            'outputAudioStart' => $outputFacts['audioStartSeconds'] ?? null,
+            'outputVideoStart' => $outputVideoStart,
+            'inputOffset' => $inputOffset,
+            'outputOffset' => $outputOffset,
+            'tolerance' => $timingTolerance,
+        ], JSON_THROW_ON_ERROR));
+    }
+    ensure(abs($inputDuration - $outputDuration) <= (1024 / 48_000), 'Short-clip duration changed by more than one AAC frame.');
+}
+
+function decoderFailurePhase(string $errorOutput): ?string
+{
+    if (preg_match('/\AF28_PHASE=(input_probe|input_validation|frame_scan|transcode|output_probe|output_validation)\n\z/D', $errorOutput, $matches) !== 1) {
+        return null;
+    }
+
+    return $matches[1];
+}
+
+function moovIsAtEnd(string $path): bool
+{
+    $contents = file_get_contents($path);
+    $offset = 0;
+    $lastType = '';
+    while (is_string($contents) && $offset + 8 <= strlen($contents)) {
+        $size = unpack('Nsize', substr($contents, $offset, 4))['size'];
+        $type = substr($contents, $offset + 4, 4);
+        if ($size < 8 || $offset + $size > strlen($contents)) {
+            return false;
+        }
+        $lastType = $type;
+        $offset += $size;
+    }
+
+    return $offset === strlen((string) $contents) && $lastType === 'moov';
+}
+
+function assertExternalReferenceResolves(string $path): void
+{
+    $process = new Process([
+        FFPROBE_BIN, '-v', 'error', '-protocol_whitelist', 'file', '-f', 'mov',
+        '-enable_drefs', '1', '-use_absolute_path', '1',
+        '-select_streams', 'v:0', '-show_frames', '-show_entries', 'frame=media_type', '-of', 'json', $path,
+    ], timeout: 20);
+    $process->run();
+    $output = $process->getOutput();
+    if (! $process->isSuccessful() || strlen($output) > MAX_SYNTHETIC_AUDIO_FACTS_BYTES) {
+        throw new RuntimeException('Synthetic external-reference positive control failed.');
+    }
+
+    $facts = json_decode($output, true, flags: JSON_THROW_ON_ERROR);
+    $frames = $facts['frames'] ?? null;
+    if (! is_array($frames) || $frames === []) {
+        throw new RuntimeException('Synthetic external-reference positive control decoded no frames.');
+    }
+    foreach ($frames as $frame) {
+        if (($frame['media_type'] ?? null) !== 'video') {
+            throw new RuntimeException('Synthetic external-reference positive control returned an unexpected frame type.');
+        }
+    }
+}
+
+function rewriteExternalDataReference(string $contents, string $externalPath): string
+{
+    $found = false;
+    $output = rewriteBoxes($contents, 0, $found, $externalPath);
+    if (! $found) {
+        throw new RuntimeException('Synthetic MP4 did not contain a self-contained data reference.');
+    }
+
+    return $output;
+}
+
+function zeroMediaDataPayload(string $contents): string
+{
+    $offset = 0;
+    $found = false;
+    $length = strlen($contents);
+    while ($offset + 8 <= $length) {
+        $size = unpack('Nsize', substr($contents, $offset, 4))['size'];
+        $type = substr($contents, $offset + 4, 4);
+        if ($size < 8 || $offset + $size > $length) {
+            throw new RuntimeException('Unexpected malformed MP4 box during external-reference fixture construction.');
+        }
+        if ($type === 'mdat') {
+            ensure($size > 8 && ! $found, 'External-reference fixture must contain one nonempty media-data box.');
+            $contents = substr_replace($contents, str_repeat("\0", $size - 8), $offset + 8, $size - 8);
+            $found = true;
+        }
+        $offset += $size;
+    }
+    ensure($found && $offset === $length, 'External-reference fixture did not contain a complete media-data box.');
+
+    return $contents;
+}
+
+function rewriteDurationHeaders(string $contents, int $seconds): string
+{
+    $found = false;
+    $rewritten = rewriteDurationBoxes($contents, 0, $found, $seconds);
+    ensure($found, 'Could not locate MP4 duration headers for forged-duration fixture.');
+
+    return $rewritten;
+}
+
+function rewriteDurationBoxes(string $bytes, int $start, bool &$found, int $seconds): string
+{
+    $containers = ['moov', 'trak', 'mdia', 'minf', 'dinf', 'edts', 'stbl'];
+    $output = substr($bytes, 0, $start);
+    $offset = $start;
+    while ($offset + 8 <= strlen($bytes)) {
+        $size = unpack('Nsize', substr($bytes, $offset, 4))['size'];
+        $type = substr($bytes, $offset + 4, 4);
+        if ($size < 8 || $offset + $size > strlen($bytes)) {
+            throw new RuntimeException('Unexpected malformed MP4 box during duration fixture construction.');
+        }
+        $box = substr($bytes, $offset, $size);
+        if (in_array($type, ['mvhd', 'mdhd'], true)) {
+            $version = ord($box[8]);
+            $timescaleOffset = $version === 1 ? 28 : 20;
+            $durationOffset = $version === 1 ? 32 : 24;
+            $timescale = unpack('Ntimescale', substr($box, $timescaleOffset, 4))['timescale'];
+            if ($timescale < 1 || ($version !== 0 && $version !== 1)) {
+                throw new RuntimeException('Unsupported MP4 duration header version.');
+            }
+            $duration = $seconds * $timescale;
+            if ($version === 1) {
+                $box = substr_replace($box, pack('N2', intdiv($duration, 4_294_967_296), $duration % 4_294_967_296), $durationOffset, 8);
+            } else {
+                $box = substr_replace($box, pack('N', $duration), $durationOffset, 4);
+            }
+            $found = true;
+        } elseif (in_array($type, $containers, true)) {
+            $rewritten = rewriteDurationBoxes($box, 8, $found, $seconds);
+            $box = pack('N', strlen($rewritten)).$type.substr($rewritten, 8);
+        }
+        ensure(unpack('Nsize', substr($box, 0, 4))['size'] === strlen($box), 'Duration fixture rewrite produced an inconsistent MP4 box size.');
+        $output .= $box;
+        $offset += $size;
+    }
+
+    return $output.substr($bytes, $offset);
+}
+
+function rewriteBoxes(string $bytes, int $start, bool &$found, string $externalPath): string
+{
+    $containers = ['moov', 'trak', 'mdia', 'minf', 'dinf', 'edts', 'stbl'];
+    $output = substr($bytes, 0, $start);
+    $offset = $start;
+    while ($offset + 8 <= strlen($bytes)) {
+        $size = unpack('Nsize', substr($bytes, $offset, 4))['size'];
+        $type = substr($bytes, $offset + 4, 4);
+        if ($size < 8 || $offset + $size > strlen($bytes)) {
+            throw new RuntimeException('Unexpected malformed MP4 box during dref fixture construction.');
+        }
+        $box = substr($bytes, $offset, $size);
+        if ($type === 'dref') {
+            $header = substr($box, 8, 8);
+            $entry = substr($box, 16);
+            $entryType = substr($entry, 4, 4);
+            $entrySize = unpack('Nsize', substr($entry, 0, 4))['size'] ?? 0;
+            if ($entryType !== 'url ' || $entrySize !== 12 || substr($entry, 8, 4) !== "\0\0\0\1") {
+                throw new RuntimeException('Synthetic dref was not a self-contained URL entry.');
+            }
+            $volume = 'Momento generated volume';
+            $filename = 'synthetic-external-reference.mp4';
+            ensure(strlen($volume) <= 27 && strlen($filename) <= 63, 'Synthetic alias fixture names exceed their fixed fields.');
+            $aliasRecord = str_repeat("\0", 10)
+                .chr(strlen($volume)).str_pad($volume, 27, "\0")
+                .str_repeat("\0", 12)
+                .chr(strlen($filename)).str_pad($filename, 63, "\0")
+                .str_repeat("\0", 16)
+                .pack('n2', 0, 0)
+                .str_repeat("\0", 16);
+            $pathBytes = $externalPath;
+            $aliasRecord .= pack('n2', 2, strlen($pathBytes)).$pathBytes;
+            if (strlen($pathBytes) % 2 !== 0) {
+                $aliasRecord .= "\0";
+            }
+            $aliasRecord .= pack('n2', 0xFFFF, 0);
+            $alias = pack('N', 12 + strlen($aliasRecord)).'alis'."\0\0\0\0".$aliasRecord;
+            $box = pack('N', 16 + strlen($alias)).'dref'.substr($box, 8, 8).$alias;
+            $found = true;
+        } elseif (in_array($type, $containers, true)) {
+            $rewritten = rewriteBoxes($box, 8, $found, $externalPath);
+            $box = pack('N', strlen($rewritten)).$type.substr($rewritten, 8);
+        }
+        ensure(unpack('Nsize', substr($box, 0, 4))['size'] === strlen($box), 'Dref fixture rewrite produced an inconsistent MP4 box size.');
+        $output .= $box;
+        $offset += $size;
+    }
+
+    return $output.substr($bytes, $offset);
+}

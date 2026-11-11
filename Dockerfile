@@ -13,15 +13,18 @@ RUN stub_generator="$(php-config --prefix)/lib/php/build/gen_stub.php" \
     && cp -p /tmp/gen_stub.php.original "$stub_generator" \
     && rm /tmp/gen_stub.php.original \
     && apt-get update \
-    && apt-get install -y --no-install-recommends libheif-plugin-libde265 libheif-plugin-x265 \
+    && apt-get install -y --no-install-recommends ffmpeg util-linux libheif-plugin-libde265 libheif-plugin-x265 \
     && rm -rf /var/lib/apt/lists/* \
     && cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
 COPY docker/php.ini /usr/local/etc/php/conf.d/momento.ini
 COPY bin/photo-decoder /usr/local/bin/photo-decoder
 COPY bin/photo-decoder.php /usr/local/bin/photo-decoder.php
+COPY bin/conversation-video-decoder /usr/local/bin/conversation-video-decoder
+COPY bin/conversation-video-decoder.php /usr/local/bin/conversation-video-decoder.php
 COPY docker/photo-decoder-policy.xml /usr/local/share/momento-photo-decoder-policy/policy.xml
 COPY docker/icc/sRGB2014.icc /usr/local/share/momento-photo-decoder/sRGB2014.icc
+ENV MOMENTO_CONVERSATION_VIDEO_DECODER_EXECUTABLE=/usr/local/bin/conversation-video-decoder
 WORKDIR /app
 
 FROM node:22-trixie-slim AS node

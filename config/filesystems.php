@@ -46,6 +46,14 @@ return [
             'report' => false,
         ],
 
+        'conversation_attachments' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/conversation-attachments'),
+            'serve' => false,
+            'throw' => true,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
