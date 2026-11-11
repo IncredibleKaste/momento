@@ -15,7 +15,11 @@ const MAX_INPUT_BYTES = 25_000_000;
 const MAX_OUTPUT_BYTES = 25_000_000;
 const MAX_DURATION_SECONDS = 60.0;
 const MAX_PROBE_OUTPUT_BYTES = 65_536;
-const MAX_FRAME_SCAN_OUTPUT_BYTES = 1_048_576;
+const MAX_FRAME_SCAN_OUTPUT_BYTES = 2_097_152;
+const OUTPUT_AUDIO_SAMPLE_RATE = 48_000;
+const OUTPUT_AAC_FRAME_SAMPLES = 1_024;
+const MAX_OUTPUT_AAC_FRAMES = 2_812;
+const MAX_OUTPUT_AUDIO_SAMPLES = MAX_OUTPUT_AAC_FRAMES * OUTPUT_AAC_FRAME_SAMPLES;
 const MAX_LONG_EDGE = 1_440;
 const MAX_INPUT_LONG_EDGE = 4_096;
 const MAX_INPUT_PIXELS = 12_000_000;
@@ -98,7 +102,7 @@ function probe(string $path, int $wallSeconds): ?array
     return is_array($value) ? $value : null;
 }
 
-function framesHaveUnexpectedSideData(string $path): bool
+function framesHaveInvalidData(string $path, ?int $audioSampleRate): bool
 {
     $json = runNative([
         FFPROBE,
@@ -107,9 +111,8 @@ function framesHaveUnexpectedSideData(string $path): bool
         '-f', 'mov',
         '-enable_drefs', '0',
         '-use_absolute_path', '0',
-        '-select_streams', 'v:0',
         '-show_frames',
-        '-show_entries', 'frame_side_data=side_data_type',
+        '-show_entries', 'frame=media_type,nb_samples,best_effort_timestamp_time,duration_time:frame_side_data=side_data_type,skip_samples,discard_padding',
         '-of', 'json',
         $path,
     ], 25, 20, MAX_FRAME_SCAN_OUTPUT_BYTES, MAX_INPUT_BYTES);
@@ -129,6 +132,12 @@ function framesHaveUnexpectedSideData(string $path): bool
         return true;
     }
 
+    $effectiveAudioFrameCount = 0;
+    $audioSampleCount = 0;
+    $firstAudioStart = null;
+    $maxAudioEnd = null;
+    $previousAudioTimestamp = null;
+
     foreach ($frames as $frame) {
         if (! is_array($frame)) {
             return true;
@@ -137,21 +146,85 @@ function framesHaveUnexpectedSideData(string $path): bool
         if (! is_array($sideData)) {
             return true;
         }
-        foreach ($sideData as $item) {
-            if (! is_array($item) || ! is_string($item['side_data_type'] ?? null)) {
-                return true;
+
+        if (($frame['media_type'] ?? null) === 'video') {
+            foreach ($sideData as $item) {
+                if (! is_array($item) || ! is_string($item['side_data_type'] ?? null)) {
+                    return true;
+                }
+                if (! in_array($item['side_data_type'], [
+                    'H.26[45] User Data Unregistered SEI message',
+                    'Display Matrix',
+                    '3x3 displaymatrix',
+                ], true)) {
+                    return true;
+                }
             }
-            if (! in_array($item['side_data_type'], [
-                'H.26[45] User Data Unregistered SEI message',
-                'Display Matrix',
-                '3x3 displaymatrix',
-            ], true)) {
-                return true;
-            }
+
+            continue;
         }
+
+        if (($frame['media_type'] ?? null) !== 'audio' || $audioSampleRate === null) {
+            return true;
+        }
+
+        $frameSamples = filter_var($frame['nb_samples'] ?? null, FILTER_VALIDATE_INT);
+        $timestamp = numericTimestamp($frame['best_effort_timestamp_time'] ?? null);
+        $frameDuration = numericDuration($frame['duration_time'] ?? null);
+        if (! is_int($frameSamples) || $frameSamples < 1 || $timestamp === null || $frameDuration === null
+            || ($previousAudioTimestamp !== null && $timestamp <= $previousAudioTimestamp)) {
+            return true;
+        }
+
+        $skipSamples = 0;
+        $discardPadding = 0;
+        foreach ($sideData as $item) {
+            if (! is_array($item) || ($item['side_data_type'] ?? null) !== 'Skip Samples') {
+                return true;
+            }
+            $itemSkipSamples = nonNegativeInteger($item['skip_samples'] ?? 0);
+            $itemDiscardPadding = nonNegativeInteger($item['discard_padding'] ?? 0);
+            if ($itemSkipSamples === null || $itemDiscardPadding === null) {
+                return true;
+            }
+            $skipSamples += $itemSkipSamples;
+            $discardPadding += $itemDiscardPadding;
+        }
+
+        if ($skipSamples + $discardPadding > $frameSamples) {
+            return true;
+        }
+
+        $frameStart = $timestamp + ($skipSamples / $audioSampleRate);
+        $frameEnd = $timestamp + $frameDuration - ($discardPadding / $audioSampleRate);
+        $effectiveSamples = $frameSamples - $skipSamples - $discardPadding;
+        $audioSampleCount += $effectiveSamples;
+        if ($audioSampleCount > ($audioSampleRate * MAX_DURATION_SECONDS)) {
+            return true;
+        }
+
+        $previousAudioTimestamp = $timestamp;
+        if ($effectiveSamples === 0) {
+            continue;
+        }
+        if ($frameEnd <= $frameStart) {
+            return true;
+        }
+
+        $effectiveAudioFrameCount++;
+        $firstAudioStart ??= $frameStart;
+        $maxAudioEnd = $maxAudioEnd === null ? $frameEnd : max($maxAudioEnd, $frameEnd);
     }
 
-    return false;
+    if ($audioSampleRate === null) {
+        return false;
+    }
+
+    return $effectiveAudioFrameCount === 0
+        || ! is_float($firstAudioStart)
+        || ! is_float($maxAudioEnd)
+        || $maxAudioEnd > MAX_DURATION_SECONDS
+        || ($maxAudioEnd - $firstAudioStart) > MAX_DURATION_SECONDS;
 }
 
 function runNative(array $arguments, int $wallSeconds, int $cpuSeconds, int $stdoutLimit, int $fileLimit, int $memoryLimit = MEMORY_LIMIT_BYTES): ?string
@@ -203,6 +276,7 @@ function runNative(array $arguments, int $wallSeconds, int $cpuSeconds, int $std
 }
 
 /** @param array<string, mixed> $probe */
+/** @return array{width: int, height: int, audioSampleRate: ?int}|null */
 function validInputProbe(array $probe): ?array
 {
     $format = $probe['format'] ?? null;
@@ -265,11 +339,19 @@ function validInputProbe(array $probe): ?array
         return null;
     }
 
-    if ($audios !== [] && ! in_array($audios[0]['codec_name'] ?? null, ['aac', 'mp3'], true)) {
-        return null;
+    $audioSampleRate = null;
+    if ($audios !== []) {
+        $audioSampleRate = filter_var($audios[0]['sample_rate'] ?? null, FILTER_VALIDATE_INT);
+        $audioDuration = numericDuration($audios[0]['duration'] ?? null);
+        if (! in_array($audios[0]['codec_name'] ?? null, ['aac', 'mp3'], true)
+            || ! is_int($audioSampleRate)
+            || $audioSampleRate < 1
+            || ($audioDuration !== null && $audioDuration > MAX_DURATION_SECONDS)) {
+            return null;
+        }
     }
 
-    return ['width' => $width, 'height' => $height];
+    return ['width' => $width, 'height' => $height, 'audioSampleRate' => $audioSampleRate];
 }
 
 function acceptedBrand(string $brand): bool
@@ -286,6 +368,27 @@ function numericDuration(mixed $value): ?float
     $duration = (float) $value;
 
     return is_finite($duration) && $duration > 0 ? $duration : null;
+}
+
+function numericTimestamp(mixed $value): ?float
+{
+    if (! is_string($value) && ! is_int($value) && ! is_float($value)) {
+        return null;
+    }
+    if (! is_numeric($value)) {
+        return null;
+    }
+
+    $timestamp = (float) $value;
+
+    return is_finite($timestamp) ? $timestamp : null;
+}
+
+function nonNegativeInteger(mixed $value): ?int
+{
+    $integer = filter_var($value, FILTER_VALIDATE_INT);
+
+    return is_int($integer) && $integer >= 0 ? $integer : null;
 }
 
 function frameRate(mixed $value): ?float
@@ -374,6 +477,10 @@ function validOutputProbe(array $probe): ?array
         if (! is_array($stream)) {
             return null;
         }
+        $streamDuration = numericDuration($stream['duration'] ?? null);
+        if ($streamDuration !== null && $streamDuration > MAX_DURATION_SECONDS) {
+            return null;
+        }
         if (($stream['codec_type'] ?? null) === 'video') {
             $videos[] = $stream;
         } elseif (($stream['codec_type'] ?? null) === 'audio') {
@@ -412,8 +519,12 @@ function validOutputProbe(array $probe): ?array
         return null;
     }
 
-    if ($audios !== [] && ($audios[0]['codec_name'] ?? null) !== 'aac') {
-        return null;
+    if ($audios !== []) {
+        $audioSampleRate = filter_var($audios[0]['sample_rate'] ?? null, FILTER_VALIDATE_INT);
+        if (($audios[0]['codec_name'] ?? null) !== 'aac'
+            || $audioSampleRate !== OUTPUT_AUDIO_SAMPLE_RATE) {
+            return null;
+        }
     }
 
     return ['width' => $width, 'height' => $height, 'duration' => $duration];
@@ -511,11 +622,14 @@ try {
         failVideo();
     }
     $failurePhase = 'frame_scan';
-    if (framesHaveUnexpectedSideData($inputPath)) {
+    if (framesHaveInvalidData($inputPath, $dimensions['audioSampleRate'])) {
         failVideo();
     }
 
     $filter = "scale=w='min(1440,iw)':h='min(1440,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1,fps='min(30,source_fps)',format=yuv420p";
+    $audioFilter = $dimensions['audioSampleRate'] === null
+        ? []
+        : ['-af', 'aresample='.OUTPUT_AUDIO_SAMPLE_RATE.',atrim=end_sample='.MAX_OUTPUT_AUDIO_SAMPLES];
     $failurePhase = 'transcode';
     $transcode = runNative([
         FFMPEG,
@@ -540,6 +654,7 @@ try {
         '-map_metadata:s', '-1',
         '-map_chapters', '-1',
         '-vf', $filter,
+        ...$audioFilter,
         '-c:v', 'libx264',
         '-preset', 'veryfast',
         '-crf', '25',
