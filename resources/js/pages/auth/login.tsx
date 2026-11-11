@@ -1,4 +1,4 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, usePage } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
@@ -9,18 +9,41 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { register } from '@/routes';
 import { store } from '@/routes/login';
+import { start as oidcStart } from '@/routes/oidc';
 import { request } from '@/routes/password';
 import PasskeyVerify from '@/components/passkey-verify';
+
+type PageProps = {
+    errors?: {
+        oidc?: string | string[];
+    };
+};
 
 type Props = {
     status?: string;
     canResetPassword: boolean;
+    canGoogleLogin?: boolean;
+    canSwitchLogin?: boolean;
 };
 
-export default function Login({ status, canResetPassword }: Props) {
+export default function Login({
+    status,
+    canResetPassword,
+    canGoogleLogin = false,
+    canSwitchLogin = false,
+}: Props) {
+    const oidcErrors = usePage<PageProps>().props.errors?.oidc;
+    const oidcError = Array.isArray(oidcErrors) ? oidcErrors[0] : oidcErrors;
+
     return (
         <>
             <Head title="Log in" />
+
+            {oidcError && (
+                <p className="text-sm text-destructive" role="alert">
+                    {oidcError}
+                </p>
+            )}
 
             <PasskeyVerify />
 
@@ -32,6 +55,33 @@ export default function Login({ status, canResetPassword }: Props) {
                 {({ processing, errors }) => (
                     <>
                         <div className="grid gap-5">
+                            {canGoogleLogin && (
+                                <Button
+                                    asChild
+                                    variant="outline"
+                                    className="w-full"
+                                >
+                                    <a href={oidcStart.url('google')}>
+                                        Continue with Google
+                                    </a>
+                                </Button>
+                            )}
+                            {canSwitchLogin && (
+                                <Button
+                                    asChild
+                                    variant="outline"
+                                    className="w-full"
+                                >
+                                    <a href={oidcStart.url('switch')}>
+                                        Continue with SWITCH edu-ID
+                                    </a>
+                                </Button>
+                            )}
+                            {(canGoogleLogin || canSwitchLogin) && (
+                                <div className="border-t border-border pt-4 text-center text-xs text-muted-foreground">
+                                    or log in with a local account
+                                </div>
+                            )}
                             <div className="grid gap-2">
                                 <Label htmlFor="email">Email address</Label>
                                 <Input
