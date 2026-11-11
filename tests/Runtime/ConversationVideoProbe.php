@@ -64,7 +64,7 @@ try {
 
     $exactLimit = $temporaryDirectory.'/exact-60.mp4';
     createFixture($exactLimit, 60, true, true, framesPerSecond: 1);
-    decodeFixture($exactLimit, $temporaryDirectory.'/exact-60-output.mp4');
+    decodeFixture($exactLimit, $temporaryDirectory.'/exact-60-output.mp4', inspectOutputValidationFailure: true);
 
     $tooLong = $temporaryDirectory.'/too-long.mp4';
     createFixture($tooLong, 61, true, false, framesPerSecond: 1);
@@ -247,7 +247,7 @@ function syntheticDisplayRotation(string $path): ?float
 }
 
 /** @return array{width: int, height: int} */
-function decodeFixture(string $input, string $output): array
+function decodeFixture(string $input, string $output, bool $inspectOutputValidationFailure = false): array
 {
     $process = new Process([VIDEO_DECODER, $input, $output], timeout: 140);
     $process->run();
@@ -256,6 +256,30 @@ function decodeFixture(string $input, string $output): array
         $message = 'The video decoder rejected a supported synthetic fixture.';
         if ($phase !== null) {
             $message = 'The video decoder rejected a supported synthetic fixture during '.$phase.'.';
+        }
+        if ($inspectOutputValidationFailure && $phase === 'output_validation') {
+            ensure(! file_exists($output) && ! is_link($output), 'The original helper did not clean its failed output.');
+            $helper = @file_get_contents('/usr/local/bin/conversation-video-decoder.php');
+            $diagnosticHelper = dirname($input).'/conversation-video-decoder-diagnostic.php';
+            $cleanup = '        removePartialOutput($outputPath);';
+            ensure(is_string($helper) && substr_count($helper, $cleanup) === 1, 'Could not prepare the bounded synthetic decoder reproduction.');
+            $replacement = '        if ($failurePhase !== \'output_validation\') {'."\n".
+                '            removePartialOutput($outputPath);'."\n".
+                '        }';
+            $helper = str_replace($cleanup, $replacement, $helper);
+            ensure(file_put_contents($diagnosticHelper, $helper) === strlen($helper), 'Could not write the bounded synthetic decoder copy.');
+
+            $reproduction = new Process(['/usr/bin/env', '-i', '/usr/local/bin/php', $diagnosticHelper, $input, $output], timeout: 140);
+            $reproduction->run();
+            ensure(! $reproduction->isSuccessful() && decoderFailurePhase($reproduction->getErrorOutput()) === 'output_validation' && is_file($output), 'The synthetic output-validation failure did not reproduce.');
+
+            $facts = assertCommand([
+                FFPROBE_BIN, '-v', 'error', '-protocol_whitelist', 'file', '-f', 'mov',
+                '-show_streams', '-show_format', '-show_entries',
+                'format=format_name,duration:stream=codec_type,codec_name,profile,level,pix_fmt,width,height,avg_frame_rate,duration',
+                '-of', 'json', $output,
+            ]);
+            $message .= ' Bounded synthetic ffprobe fields: '.$facts;
         }
 
         throw new RuntimeException($message);
