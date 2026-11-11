@@ -9,6 +9,9 @@ const FFMPEG_BIN = '/usr/bin/ffmpeg';
 const FFPROBE_BIN = '/usr/bin/ffprobe';
 const VIDEO_DECODER = '/usr/local/bin/conversation-video-decoder';
 const MAX_SYNTHETIC_AUDIO_FACTS_BYTES = 1_048_576;
+const MAX_SYNTHETIC_PCM_BYTES = 1_048_576;
+const SYNTHETIC_AUDIO_SAMPLE_RATE = 48_000;
+const SYNTHETIC_AUDIBLE_THRESHOLD = 0.01;
 
 $temporaryDirectory = sys_get_temp_dir().'/momento-video-probe-'.bin2hex(random_bytes(8));
 if (! mkdir($temporaryDirectory, 0700)) {
@@ -67,7 +70,14 @@ try {
     $exactLimit = $temporaryDirectory.'/exact-60.mp4';
     createFixture($exactLimit, 60, true, true, framesPerSecond: 1);
     decodeFixture($exactLimit, $temporaryDirectory.'/exact-60-output.mp4', includeExactDurationFacts: true);
-    assertShortAudioVideoTimingPreserved(syntheticAudioFacts($ordinary), syntheticAudioFacts($ordinaryOutput));
+    $ordinaryInputAudioFacts = syntheticAudioFacts($ordinary);
+    $ordinaryOutputAudioFacts = syntheticAudioFacts($ordinaryOutput);
+    assertShortAudioVideoTimingPreserved(
+        $ordinaryInputAudioFacts,
+        $ordinaryOutputAudioFacts,
+        syntheticAudibleOnset($ordinary, $ordinaryInputAudioFacts),
+        syntheticAudibleOnset($ordinaryOutput, $ordinaryOutputAudioFacts),
+    );
 
     $tooLong = $temporaryDirectory.'/too-long.mp4';
     createFixture($tooLong, 61, true, false, framesPerSecond: 1);
@@ -466,31 +476,92 @@ function syntheticNonNegativeInteger(mixed $value): ?int
     return is_int($integer) && $integer >= 0 ? $integer : null;
 }
 
-/** @param array<string, mixed> $inputFacts @param array<string, mixed> $outputFacts */
-function assertShortAudioVideoTimingPreserved(array $inputFacts, array $outputFacts): void
+/** @param array<string, mixed> $audioFacts */
+function syntheticAudibleOnset(string $path, array $audioFacts): ?float
 {
-    $inputAudioStart = $inputFacts['firstAudioFrameSeconds'] ?? null;
+    $framePts = $audioFacts['firstAudioFrameSeconds'] ?? null;
+    if (! is_float($framePts) || ($audioFacts['sampleRate'] ?? null) !== SYNTHETIC_AUDIO_SAMPLE_RATE) {
+        return null;
+    }
+
+    $process = new Process([
+        FFMPEG_BIN, '-nostdin', '-hide_banner', '-loglevel', 'error',
+        '-protocol_whitelist', 'file', '-f', 'mov', '-enable_drefs', '0', '-use_absolute_path', '0',
+        '-i', $path, '-map', '0:a:0', '-vn', '-sn', '-dn',
+        '-ac', '1', '-ar', (string) SYNTHETIC_AUDIO_SAMPLE_RATE, '-c:a', 'pcm_f32le', '-f', 'f32le', 'pipe:1',
+    ], timeout: 20);
+    $process->disableOutput();
+    $pcm = '';
+    $overflow = false;
+
+    try {
+        $process->start(function (string $type, string $data) use ($process, &$pcm, &$overflow): void {
+            if ($type !== Process::OUT) {
+                return;
+            }
+
+            if (strlen($pcm) + strlen($data) > MAX_SYNTHETIC_PCM_BYTES) {
+                $overflow = true;
+                $process->stop(0);
+
+                return;
+            }
+
+            $pcm .= $data;
+        });
+        $process->wait();
+    } catch (Throwable) {
+        return null;
+    }
+
+    if (! $process->isSuccessful() || $overflow || $pcm === '' || strlen($pcm) % 4 !== 0) {
+        return null;
+    }
+
+    for ($offset = 0; $offset < strlen($pcm); $offset += 4) {
+        $sample = unpack('gvalue', substr($pcm, $offset, 4))['value'] ?? null;
+        if (! is_float($sample) || ! is_finite($sample)) {
+            return null;
+        }
+        if (abs($sample) > SYNTHETIC_AUDIBLE_THRESHOLD) {
+            return $framePts + (intdiv($offset, 4) / SYNTHETIC_AUDIO_SAMPLE_RATE);
+        }
+    }
+
+    return null;
+}
+
+/** @param array<string, mixed> $inputFacts @param array<string, mixed> $outputFacts */
+function assertShortAudioVideoTimingPreserved(
+    array $inputFacts,
+    array $outputFacts,
+    ?float $inputAudibleOnset,
+    ?float $outputAudibleOnset,
+): void {
     $inputVideoStart = $inputFacts['videoStartSeconds'] ?? null;
-    $outputAudioStart = $outputFacts['firstAudioFrameSeconds'] ?? null;
     $outputVideoStart = $outputFacts['videoStartSeconds'] ?? null;
     $inputDuration = $inputFacts['formatDurationSeconds'] ?? null;
     $outputDuration = $outputFacts['formatDurationSeconds'] ?? null;
-    if (! is_float($inputAudioStart) || ! is_float($inputVideoStart)
-        || ! is_float($outputAudioStart) || ! is_float($outputVideoStart)
+    if (! is_float($inputAudibleOnset) || ! is_float($inputVideoStart)
+        || ! is_float($outputAudibleOnset) || ! is_float($outputVideoStart)
         || ! is_float($inputDuration) || ! is_float($outputDuration)) {
-        throw new RuntimeException('Could not inspect bounded synthetic audio/video timing.');
+        throw new RuntimeException('Synthetic audible onset facts unavailable: '.json_encode([
+            'inputVideoStart' => $inputVideoStart,
+            'inputAudibleOnset' => $inputAudibleOnset,
+            'outputVideoStart' => $outputVideoStart,
+            'outputAudibleOnset' => $outputAudibleOnset,
+        ], JSON_THROW_ON_ERROR));
     }
 
-    $inputOffset = $inputAudioStart - $inputVideoStart;
-    $outputOffset = $outputAudioStart - $outputVideoStart;
-    if (abs($inputOffset - $outputOffset) > 0.001) {
-        throw new RuntimeException('Audio/video offset changed: '.json_encode([
-            'inputAudioStart' => $inputAudioStart,
-            'inputVideoStart' => $inputVideoStart,
-            'outputAudioStart' => $outputAudioStart,
-            'outputVideoStart' => $outputVideoStart,
+    $inputOffset = $inputAudibleOnset - $inputVideoStart;
+    $outputOffset = $outputAudibleOnset - $outputVideoStart;
+    $timingTolerance = (1024 / 48_000) + 0.001;
+    if (abs($inputOffset - 0.125) > $timingTolerance || abs($inputOffset - $outputOffset) > $timingTolerance) {
+        throw new RuntimeException('Synthetic audible A/V offsets differ: '.json_encode([
+            'expectedInputOffset' => 0.125,
             'inputOffset' => $inputOffset,
             'outputOffset' => $outputOffset,
+            'tolerance' => $timingTolerance,
         ], JSON_THROW_ON_ERROR));
     }
     ensure(abs($inputDuration - $outputDuration) <= (1024 / 48_000), 'Short-clip duration changed by more than one AAC frame.');
