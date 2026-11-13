@@ -69,6 +69,29 @@ jobs:
           '
           docker run --rm --entrypoint frankenphp momento:ci validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
+      - name: Verify queue worker alarm signals in the runtime
+        timeout-minutes: 1
+        run: |
+          trap 'docker rm -f momento-worker-signal-probe > /dev/null 2>&1 || true' EXIT
+          timeout --signal=KILL 15s docker run --rm --name momento-worker-signal-probe \
+            --network none --cap-drop ALL --security-opt no-new-privileges \
+            --memory 128m --pids-limit 32 \
+            --entrypoint php momento:ci -r '
+              foreach (["pcntl_async_signals", "pcntl_signal", "pcntl_alarm"] as $function) {
+                  if (! function_exists($function)) {
+                      throw new RuntimeException("Missing queue worker signal function: ".$function);
+                  }
+              }
+              pcntl_async_signals(true);
+              pcntl_signal(SIGALRM, static function (): void {
+                  echo "Queue worker alarm signal handled\n";
+                  exit(0);
+              });
+              pcntl_alarm(1);
+              sleep(3);
+              throw new RuntimeException("Queue worker alarm signal was not handled.");
+            '
+
       - name: Verify image codecs in the runtime
         run: |
           docker run --rm --entrypoint php momento:ci -r '

@@ -9,7 +9,7 @@ RUN stub_generator="$(php-config --prefix)/lib/php/build/gen_stub.php" \
     && php /tmp/patch-php-parser-download.php "$stub_generator" \
     && php -l "$stub_generator" \
     && rm /tmp/patch-php-parser-download.php /tmp/PhpParserDownloadPatchProbe.php \
-    && install-php-extensions pdo_pgsql redis imagick intl zip bcmath mbstring \
+    && install-php-extensions pdo_pgsql redis imagick intl zip bcmath mbstring pcntl \
     && cp -p /tmp/gen_stub.php.original "$stub_generator" \
     && rm /tmp/gen_stub.php.original \
     && apt-get update \
